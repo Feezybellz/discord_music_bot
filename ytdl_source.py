@@ -5,9 +5,6 @@ import logging
 
 logger = logging.getLogger('music_bot.ytdl')
 
-# Suppress noise about console usage from errors
-# Removed the bug_reports_message lambda that was causing errors
-
 ytdl_format_options = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
@@ -19,7 +16,13 @@ ytdl_format_options = {
     'quiet': True,
     'no_warnings': True,
     'default_search': 'auto',
-    'source_address': '0.0.0.0',  # bind to ipv4 since ipv6 addresses often cause issues
+    'source_address': '0.0.0.0',
+    # Spoofing as a mobile client is currently the best way to bypass bot detection
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['android', 'web'],
+        }
+    }
 }
 
 ffmpeg_options = {
@@ -45,13 +48,13 @@ class YTDLSource(discord.PCMVolumeTransformer):
         logger.debug(f"Starting extraction for URL: {url}")
         
         try:
+            # We use extract_info which will now use the android player client spoofing
             data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
         except Exception as e:
             logger.error(f"YTDL extraction failed: {e}")
             raise
 
         if 'entries' in data:
-            logger.debug("Playlist detected, choosing first entry.")
             data = data['entries'][0]
 
         filename = data['url'] if stream else ytdl.prepare_filename(data)
