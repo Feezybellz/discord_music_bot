@@ -14,7 +14,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 
 def normalize_url(url: str) -> str:
-    """Convert music.youtube.com URLs → www.youtube.com."""
+    """Convert music.youtube.com URLs → www.youtube.com so yt-dlp lists all formats."""
     return re.sub(r'music\.youtube\.com', 'www.youtube.com', url)
 
 
@@ -25,32 +25,23 @@ def _find_cookie_file() -> str | None:
         candidates.append(Path(env_path))
     for name in ('cookies.txt', 'cookie.txt'):
         candidates.append(BASE_DIR / name)
-
     for p in candidates:
         logger.info(f"Cookie search: trying {p} ... {'FOUND' if p.exists() else 'not found'}")
         if p.exists():
             logger.info(f"Cookie file selected: {p}")
             return str(p)
-
     logger.warning(f"No cookie file found. Place cookie.txt in: {BASE_DIR}")
     return None
 
 
 COOKIE_FILE = _find_cookie_file()
-PROXY_URL = os.getenv('PROXY_URL')
-
-if PROXY_URL:
-    logger.info(f"Proxy loaded: {PROXY_URL.split('@')[-1]}")  # log host only, hide credentials
-else:
-    logger.warning(
-        "No PROXY_URL set. On datacenter IPs (Azure/AWS/GCP), YouTube will block requests. "
-        "Set PROXY_URL=http://user:pass@host:port in your .env file."
-    )
 
 
 def _build_ytdl_options() -> dict:
     opts = {
-        'format': 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best[acodec!=none]/best',
+        # itag=18 is a combined video/audio mp4 — always IP-unlocked on android client
+        # We prefer audio-only but fall all the way back to itag 18 if needed
+        'format': 'bestaudio[protocol^=https]/bestaudio/best[acodec!=none]/best',
         'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
         'restrictfilenames': True,
         'noplaylist': True,
@@ -71,23 +62,21 @@ def _build_ytdl_options() -> dict:
     if COOKIE_FILE:
         opts['cookiefile'] = COOKIE_FILE
 
-    # Route through residential proxy to bypass datacenter IP blocks
-    if PROXY_URL:
-        opts['proxy'] = PROXY_URL
-
-    extractor_args: dict = {
+    # KEY FIX: Use ONLY the android client.
+    # Android client streams are NOT IP-locked — the signed URL works from any IP.
+    # web/ios/mweb clients produce IP-locked URLs that fail with 403 on cloud VMs.
+    opts['extractor_args'] = {
         'youtube': {
-            'player_client': ['music', 'ios', 'web', 'android', 'mweb'],
+            'player_client': ['android'],
         }
     }
 
     po_token = os.getenv('PO_TOKEN')
     if po_token:
         token_val = po_token if po_token.startswith('web+') else f'web+{po_token}'
-        extractor_args['youtube']['po_token'] = [token_val]
+        opts['extractor_args']['youtube']['po_token'] = [token_val]
         logger.info('PO Token loaded.')
 
-    opts['extractor_args'] = extractor_args
     return opts
 
 
