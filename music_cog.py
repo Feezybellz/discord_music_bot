@@ -132,13 +132,10 @@ class Music(commands.Cog):
                     vc = await channel.connect()
                 else:
                     logger.debug("No channel specified, searching for user's voice channel...")
-                    member = interaction.guild.get_member(interaction.user.id)
-                    if not member or not member.voice:
-                        member = await interaction.guild.fetch_member(interaction.user.id)
-
-                    if member.voice:
-                        logger.info(f"Connecting to user's channel: {member.voice.channel.name}")
-                        vc = await member.voice.channel.connect()
+                    # interaction.user is already a Member object in guild interactions
+                    if interaction.user.voice:
+                        logger.info(f"Connecting to user's channel: {interaction.user.voice.channel.name}")
+                        vc = await interaction.user.voice.channel.connect()
                     else:
                         logger.warning(f"User {interaction.user.id} not in voice and no channel provided.")
                         return await interaction.followup.send("Please either mention a voice channel or join one yourself!")
