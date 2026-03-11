@@ -61,67 +61,54 @@ class MusicPlayer:
     def destroy(self, guild):
         return self.bot.loop.create_task(self._cog.cleanup(guild))
 
-class Music(commands.Cog):
-    def __init__(self, bot):
+class MusicBotGroup(app_commands.Group):
+    """Grouped commands under /musicbot"""
+    def __init__(self, bot, players):
+        super().__init__(name="musicbot", description="All music related commands")
         self.bot = bot
-        self.players = {}
-
-    async def cleanup(self, guild):
-        try:
-            await guild.voice_client.disconnect()
-        except:
-            pass
-        try:
-            del self.players[guild.id]
-        except:
-            pass
+        self.players = players
 
     def get_player(self, interaction):
         try:
             player = self.players[interaction.guild.id]
         except KeyError:
-            player = MusicPlayer(interaction)
+            # We use interaction as a pseudo-context
+            class PseudoCtx:
+                def __init__(self, interaction, bot, cog):
+                    self.interaction = interaction
+                    self.bot = bot
+                    self.guild = interaction.guild
+                    self.channel = interaction.channel
+                    self.cog = cog
+            
+            # Find the cog instance
+            cog = self.bot.get_cog("Music")
+            player = MusicPlayer(PseudoCtx(interaction, self.bot, cog))
             self.players[interaction.guild.id] = player
         return player
 
     @app_commands.command(name="play", description="Plays a song.")
-    @app_commands.describe(search="Song name or URL", channel_name="Name or ID of voice channel (optional)")
-    async def play_(self, interaction: discord.Interaction, search: str, channel_name: str = None):
+    @app_commands.describe(search="Song name or URL", channel="The voice channel to join")
+    async def play_(self, interaction: discord.Interaction, search: str, channel: Optional[discord.VoiceChannel] = None):
         logger.info(f"Play command: {search}")
         try:
             await interaction.response.defer()
             
-            target_channel = None
+            target_channel = channel
             
-            # 1. If channel_name is provided, find it
-            if channel_name:
-                # Search by name or ID
-                for ch in interaction.guild.channels:
-                    if isinstance(ch, discord.VoiceChannel) and (ch.name == channel_name or str(ch.id) == channel_name):
-                        target_channel = ch
-                        break
-                if not target_channel:
-                    return await interaction.followup.send(f"Could not find voice channel: {channel_name}")
-            
-            # 2. If no channel provided, use user's current channel
+            # If no channel provided, use user's current channel
             if not target_channel:
                 if interaction.user.voice:
                     target_channel = interaction.user.voice.channel
-            
-            # 3. If STILL no channel, but the command was sent in a voice channel, use that
-            if not target_channel and isinstance(interaction.channel, discord.VoiceChannel):
-                target_channel = interaction.channel
 
             if not target_channel:
-                return await interaction.followup.send("Please join a voice channel or provide a channel name!")
+                return await interaction.followup.send("Please select a voice channel or join one yourself!")
 
             # Connect if not connected
             vc = interaction.guild.voice_client
             if not vc:
-                logger.info(f"Connecting to {target_channel.name}")
                 vc = await target_channel.connect()
             elif vc.channel.id != target_channel.id:
-                logger.info(f"Moving to {target_channel.name}")
                 await vc.move_to(target_channel)
 
             player = self.get_player(interaction)
@@ -131,6 +118,30 @@ class Music(commands.Cog):
         except Exception as e:
             logger.error(f"Error: {e}", exc_info=True)
             await interaction.followup.send(f"An error occurred: {e}")
+
+    @app_commands.command(name="status", description="Shows the bot's current status and permissions.")
+    async def status_(self, interaction: discord.Interaction):
+        perms = interaction.app_permissions
+        status_embed = discord.Embed(title="Bot Status Report", color=discord.Color.green())
+        status_embed.add_field(name="Current Guild", value=f"{interaction.guild.name} ({interaction.guild.id})")
+        status_embed.add_field(name="Total Guilds Seen", value=f"{len(self.bot.guilds)}")
+        
+        perm_list = [
+            ("Connect", perms.connect),
+            ("Speak", perms.speak),
+            ("Use Slash Commands", perms.use_application_commands),
+            ("View Channels", perms.view_channel),
+            ("Send Messages", perms.send_messages),
+            ("Embed Links", perms.embed_links)
+        ]
+        
+        perm_str = "\n".join([f"{'✅' if val else '❌'} {name}" for name, val in perm_list])
+        status_embed.add_field(name="Permissions Check", value=perm_str, inline=False)
+        
+        vc = interaction.guild.voice_client
+        vc_status = f"Connected to: {vc.channel.name}" if vc else "Not connected to voice."
+        status_embed.add_field(name="Voice Status", value=vc_status, inline=False)
+        await interaction.response.send_message(embed=status_embed)
 
     @app_commands.command(name="pause")
     async def pause_(self, interaction: discord.Interaction):
@@ -158,7 +169,8 @@ class Music(commands.Cog):
 
     @app_commands.command(name="stop")
     async def stop_(self, interaction: discord.Interaction):
-        await self.cleanup(interaction.guild)
+        cog = self.bot.get_cog("Music")
+        await cog.cleanup(interaction.guild)
         await interaction.response.send_message("Stopped.")
 
     @app_commands.command(name="queue")
@@ -170,40 +182,33 @@ class Music(commands.Cog):
         fmt = '\n'.join(f'**{i+1}.** {song}' for i, song in enumerate(upcoming))
         await interaction.response.send_message(embed=discord.Embed(title="Queue", description=fmt))
 
-    @app_commands.command(name="status", description="Shows the bot's current status and permissions.")
-    async def status_(self, interaction: discord.Interaction):
-        logger.info(f"Status command requested by {interaction.user.id}")
-        
-        try:
-            # Check permissions in the current channel
-            perms = interaction.app_permissions
-            
-            status_embed = discord.Embed(title="Bot Status Report", color=discord.Color.green())
-            status_embed.add_field(name="Current Guild", value=f"{interaction.guild.name} ({interaction.guild.id})")
-            status_embed.add_field(name="Total Guilds Seen", value=f"{len(self.bot.guilds)}")
-            
-            # Key permissions check
-            perm_list = [
-                ("Connect", perms.connect),
-                ("Speak", perms.speak),
-                ("Use Slash Commands", perms.use_application_commands),
-                ("View Channels", perms.view_channel),
-                ("Send Messages", perms.send_messages),
-                ("Embed Links", perms.embed_links)
-            ]
-            
-            perm_str = "\n".join([f"{'✅' if val else '❌'} {name}" for name, val in perm_list])
-            status_embed.add_field(name="Permissions Check", value=perm_str, inline=False)
-            
-            # Voice status
-            vc = interaction.guild.voice_client
-            vc_status = f"Connected to: {vc.channel.name}" if vc else "Not connected to voice."
-            status_embed.add_field(name="Voice Status", value=vc_status, inline=False)
+    @app_commands.command(name="loop")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="Off", value=0),
+        app_commands.Choice(name="Track", value=1),
+        app_commands.Choice(name="Queue", value=2),
+    ])
+    async def loop_(self, interaction: discord.Interaction, mode: app_commands.Choice[int]):
+        player = self.get_player(interaction)
+        player.loop_mode = mode.value
+        await interaction.response.send_message(f"Loop set to {mode.name}.")
 
-            await interaction.response.send_message(embed=status_embed)
-        except Exception as e:
-            logger.error(f"Error in status command: {e}", exc_info=True)
-            await interaction.response.send_message(f"Error fetching status: {e}")
+class Music(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.players = {}
+        # Register the group
+        self.bot.tree.add_command(MusicBotGroup(bot, self.players))
+
+    async def cleanup(self, guild):
+        try:
+            await guild.voice_client.disconnect()
+        except:
+            pass
+        try:
+            del self.players[guild.id]
+        except:
+            pass
 
 async def setup(bot):
     await bot.add_cog(Music(bot))
