@@ -29,14 +29,22 @@ class MusicPlayer:
         await self.bot.wait_until_ready()
         while not self.bot.is_closed():
             self.next.clear()
+            
             try:
-                async with asyncio.timeout(300):
-                    if self.loop_mode == 1 and self.current:
-                        source = await YTDLSource.from_url(self.current.webpage_url, loop=self.bot.loop, stream=True)
-                    else:
-                        source = await self.queue.get()
+                # Python 3.10 compatible timeout
+                if self.loop_mode == 1 and self.current:
+                    source = await asyncio.wait_for(
+                        YTDLSource.from_url(self.current.webpage_url, loop=self.bot.loop, stream=True),
+                        timeout=300
+                    )
+                else:
+                    source = await asyncio.wait_for(self.queue.get(), timeout=300)
             except asyncio.TimeoutError:
+                logger.info(f"Player timeout in guild {self._guild.id}. Disconnecting.")
                 return self.destroy(self._guild)
+            except Exception as e:
+                logger.error(f"Error getting next song: {e}", exc_info=True)
+                continue
 
             if not isinstance(source, YTDLSource):
                 try:
@@ -47,12 +55,16 @@ class MusicPlayer:
 
             source.volume = self.volume
             self.current = source
-            self._guild.voice_client.play(source, after=lambda _: self.bot.loop.call_soon_threadsafe(self.next.set))
             
-            embed = discord.Embed(title="Now Playing", description=f"[{source.title}]({source.webpage_url})", color=discord.Color.blue())
-            embed.set_thumbnail(url=source.thumbnail)
-            self.np = await self._channel.send(embed=embed)
-            await self.next.wait()
+            if self._guild.voice_client:
+                self._guild.voice_client.play(source, after=lambda _: self.bot.loop.call_soon_threadsafe(self.next.set))
+                
+                embed = discord.Embed(title="Now Playing", description=f"[{source.title}]({source.webpage_url})", color=discord.Color.blue())
+                embed.set_thumbnail(url=source.thumbnail)
+                self.np = await self._channel.send(embed=embed)
+                
+                await self.next.wait()
+            
             source.cleanup()
             self.current = None
             if self.loop_mode == 2:
@@ -100,6 +112,8 @@ class MusicBotGroup(app_commands.Group):
             vc = interaction.guild.voice_client
             if not vc:
                 vc = await target_channel.connect()
+            elif vc.channel.id != target_channel.id:
+                await vc.move_to(target_channel)
             
             if vc.is_playing() or vc.is_paused():
                 vc.stop()
@@ -107,6 +121,7 @@ class MusicBotGroup(app_commands.Group):
             await player.queue.put(url)
             await interaction.followup.send(f"Playing **{url}** immediately.")
         except Exception as e:
+            logger.error(f"Error in play command: {e}", exc_info=True)
             await interaction.followup.send(f"Error: {e}")
 
     @app_commands.command(name="debug_play", description="Directly test YTDL and FFmpeg with a URL.")
@@ -130,7 +145,6 @@ class MusicBotGroup(app_commands.Group):
             logger.error(f"DEBUG_PLAY ERROR: {e}", exc_info=True)
             await interaction.followup.send(f"DEBUG ERROR: {e}")
 
-    # Sub-group for queue management
     queue_group = app_commands.Group(name="queue", description="Manage the music queue")
 
     @queue_group.command(name="add", description="Add a song or playlist to the end of the queue.")
@@ -194,8 +208,8 @@ class MusicBotGroup(app_commands.Group):
         status_embed = discord.Embed(title="Bot Status", color=discord.Color.green())
         status_embed.add_field(name="Guilds", value=f"{len(self.bot.guilds)}")
         perm_list = [("Connect", perms.connect), ("Speak", perms.speak)]
-        perm_str = "\n".join([f"{'✅' if val else '❌'} {name}" for name, val in perm_list])
-        status_embed.add_field(name="Voice Perms", value=perm_str)
+        perm_list_str = "\n".join([f"{'✅' if val else '❌'} {name}" for name, val in perm_list])
+        status_embed.add_field(name="Voice Perms", value=perm_list_str)
         await interaction.response.send_message(embed=status_embed)
 
     @app_commands.command(name="loop")
@@ -213,7 +227,6 @@ class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.players = {}
-        # Register the group
         music_group = MusicBotGroup(bot, self.players)
         self.bot.tree.add_command(music_group)
 
