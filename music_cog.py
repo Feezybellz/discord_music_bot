@@ -109,23 +109,27 @@ class Music(commands.Cog):
         return player
 
     @app_commands.command(name="play", description="Plays a song from a URL or search term.")
-    async def play_(self, interaction: discord.Interaction, search: str):
+    @app_commands.describe(search="The song name or URL", channel="The voice channel to join (optional)")
+    async def play_(self, interaction: discord.Interaction, search: str, channel: discord.VoiceChannel = None):
         """Request a song and add it to the queue."""
         await interaction.response.defer()
         
-        # Robustly find the member's voice state
-        member = interaction.guild.get_member(interaction.user.id)
-        if not member or not member.voice:
-            # Try fetching from API if cache is empty
-            member = await interaction.guild.fetch_member(interaction.user.id)
-
-        if not member.voice:
-            return await interaction.followup.send("I couldn't find you in a voice channel. Please join one and try again!")
-
         vc = interaction.guild.voice_client
 
         if not vc:
-            vc = await member.voice.channel.connect()
+            # If a specific channel was provided, join it
+            if channel:
+                vc = await channel.connect()
+            else:
+                # Otherwise, try to find the member's current voice channel
+                member = interaction.guild.get_member(interaction.user.id)
+                if not member or not member.voice:
+                    member = await interaction.guild.fetch_member(interaction.user.id)
+
+                if member.voice:
+                    vc = await member.voice.channel.connect()
+                else:
+                    return await interaction.followup.send("Please either mention a voice channel or join one yourself!")
 
         player = self.get_player(interaction)
 
