@@ -13,7 +13,8 @@ logger = logging.getLogger('music_bot.ytdl')
 BASE_DIR = Path(__file__).parent.resolve()
 
 ytdl_format_options = {
-    'format': 'bestaudio/best',
+    'format': 'bestaudio/best', # Primary choice
+    'fallback_format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
     'restrictfilenames': True,
     'noplaylist': True,
@@ -26,19 +27,12 @@ ytdl_format_options = {
     'source_address': '0.0.0.0', # Force IPv4
     # RECENT DESKTOP USER AGENT (2026)
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
-    'headers': {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Sec-Ch-Ua': '"Google Chrome";v="140", "Chromium";v="140", "Not:A-Brand";v="99"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-    }
 }
 
-# 1. THE CLIENT COMBO - Android is often more stable for servers
+# Advanced Extraction Bypasses - Added 'mweb' back as a backup
 ytdl_format_options['extractor_args'] = {
     'youtube': {
-        'player_client': ['android', 'web'], 
+        'player_client': ['android', 'web', 'mweb'], 
         'player_skip': ['webpage', 'configs'],
     }
 }
