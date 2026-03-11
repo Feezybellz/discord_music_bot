@@ -20,46 +20,28 @@ ytdl_format_options = {
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
-    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-}
-
-# 1. Handle Proxy
-PROXY = os.getenv('PROXY_URL')
-if PROXY:
-    logger.info(f"Using proxy: {PROXY}")
-    ytdl_format_options['proxy'] = PROXY
-
-# 2. Handle Cookies
-cookie_file = None
-if os.path.exists('cookies.txt'):
-    cookie_file = 'cookies.txt'
-elif os.path.exists('cookie.txt'):
-    cookie_file = 'cookie.txt'
-
-if cookie_file:
-    logger.info(f"Using {cookie_file} for authentication.")
-    ytdl_format_options['cookiefile'] = cookie_file
-
-# 3. Advanced Bypass (PO Token & Clients)
-ytdl_format_options['extractor_args'] = {
-    'youtube': {
-        'player_client': ['android', 'ios', 'mweb'],
-        'player_skip': ['webpage', 'configs'],
+    # Enable OAuth2 - This is the most stable method in 2026
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['android', 'ios', 'mweb'],
+            'player_skip': ['webpage', 'configs'],
+        }
     }
 }
 
-# 4. Handle PO_TOKEN
+# ENABLE OAUTH2
+ytdl_format_options['youtube_oauth'] = True
+
+# Handle Proxy if present
+PROXY = os.getenv('PROXY_URL')
+if PROXY:
+    ytdl_format_options['proxy'] = PROXY
+
+# Handle PO_TOKEN if present
 PO_TOKEN = os.getenv('PO_TOKEN')
 VISITOR_DATA = os.getenv('VISITOR_DATA')
-
 if PO_TOKEN and VISITOR_DATA:
-    logger.info("PO_TOKEN found, adding to extractor args.")
     ytdl_format_options['extractor_args']['youtube']['po_token'] = [f"web+{PO_TOKEN}"]
-
-ffmpeg_options = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'options': '-vn',
-}
 
 ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
 
@@ -69,7 +51,6 @@ class YTDLSource(discord.PCMVolumeTransformer):
         self.data = data
         self.title = data.get('title')
         self.url = data.get('url')
-        self.duration = data.get('duration')
         self.thumbnail = data.get('thumbnail')
         self.webpage_url = data.get('webpage_url')
 
@@ -88,5 +69,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             data = data['entries'][0]
 
         filename = data['url'] if stream else ytdl.prepare_filename(data)
-        logger.info(f"Source prepared: {data.get('title')}")
-        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
+        return cls(discord.FFmpegPCMAudio(filename, **{
+            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+            'options': '-vn',
+        }), data=data)
