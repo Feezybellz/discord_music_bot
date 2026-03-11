@@ -17,12 +17,11 @@ ytdl_format_options = {
     'quiet': True,
     'no_warnings': True,
     'default_search': 'auto',
-    'source_address': '0.0.0.0',
-    # Match a standard desktop browser to avoid "Reload" errors
+    'source_address': '0.0.0.0', # FORCE IPv4
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 }
 
-# Determine the best way to authenticate/bypass
+# 1. Handle Cookies
 cookie_file = None
 if os.path.exists('cookies.txt'):
     cookie_file = 'cookies.txt'
@@ -30,17 +29,26 @@ elif os.path.exists('cookie.txt'):
     cookie_file = 'cookie.txt'
 
 if cookie_file:
-    logger.info(f"Found {cookie_file}, using it for authentication.")
+    logger.info(f"Using {cookie_file} for authentication.")
     ytdl_format_options['cookiefile'] = cookie_file
-else:
-    logger.warning("No cookies.txt found. Using mobile spoofing bypass...")
-    ytdl_format_options['youtube_include_dash_manifest'] = False
-    ytdl_format_options['extractor_args'] = {
-        'youtube': {
-            'player_client': ['ios', 'mweb'],
-            'player_skip': ['webpage', 'configs'],
-        }
+
+# 2. Advanced Bypass (PO Token & Clients)
+ytdl_format_options['extractor_args'] = {
+    'youtube': {
+        'player_client': ['android', 'ios', 'mweb'],
+        'player_skip': ['webpage', 'configs'],
     }
+}
+
+# 3. Handle PO_TOKEN if present in .env
+from dotenv import load_dotenv
+load_dotenv()
+PO_TOKEN = os.getenv('PO_TOKEN')
+VISITOR_DATA = os.getenv('VISITOR_DATA')
+
+if PO_TOKEN and VISITOR_DATA:
+    logger.info("PO_TOKEN found, adding to extractor args.")
+    ytdl_format_options['extractor_args']['youtube']['po_token'] = [f"web+{PO_TOKEN}"]
 
 ffmpeg_options = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
