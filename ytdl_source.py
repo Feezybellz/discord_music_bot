@@ -24,14 +24,21 @@ ytdl_format_options = {
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0', # Force IPv4
-    # DESKTOP USER AGENT - Matches standard Chrome/Edge on Windows
-    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+    # RECENT DESKTOP USER AGENT (2026)
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+    'headers': {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Sec-Ch-Ua': '"Google Chrome";v="140", "Chromium";v="140", "Not:A-Brand";v="99"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+    }
 }
 
-# 1. THE "ULTIMATE" CLIENT COMBO
+# 1. THE CLIENT COMBO - Android is often more stable for servers
 ytdl_format_options['extractor_args'] = {
     'youtube': {
-        'player_client': ['web', 'android'], # Use web as primary for desktop cookies
+        'player_client': ['android', 'web'], 
         'player_skip': ['webpage', 'configs'],
     }
 }
@@ -40,8 +47,8 @@ ytdl_format_options['extractor_args'] = {
 cookie_paths = [
     BASE_DIR / "cookies.txt",
     BASE_DIR / "cookie.txt",
-    Path("/home/feezybellz/server/discord_bots/music_bot/cookie.txt"),
-    Path("/var/projects/discord_music_bot/cookie.txt")
+    Path("/var/projects/discord_music_bot/cookie.txt"),
+    Path("/var/projects/discord_music_bot/cookies.txt")
 ]
 
 found_cookie = None
@@ -61,7 +68,6 @@ PO_TOKEN = os.getenv('PO_TOKEN')
 VISITOR_DATA = os.getenv('VISITOR_DATA')
 if PO_TOKEN and VISITOR_DATA:
     logger.info("PO_TOKEN found, adding to extractor args.")
-    # Add po_token to our existing youtube extractor args
     ytdl_format_options['extractor_args']['youtube']['po_token'] = [f"web+{PO_TOKEN}"]
 
 ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
