@@ -13,6 +13,7 @@ logger = logging.getLogger('music_bot.ytdl')
 BASE_DIR = Path(__file__).parent.resolve()
 
 ytdl_format_options = {
+    # Broaden format to find ANY playable audio
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
     'restrictfilenames': True,
@@ -24,7 +25,7 @@ ytdl_format_options = {
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0', # Force IPv4
-    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'youtube_include_dash_manifest': False,
     'youtube_include_hls_manifest': False,
 }
@@ -45,32 +46,29 @@ else:
 if found_cookie:
     logger.info(f"SUCCESS: Using cookie file at {found_cookie}")
     ytdl_format_options['cookiefile'] = found_cookie
-else:
-    logger.warning("CRITICAL: No cookies found.")
 
 # 2. Handle Proxy
 PROXY = os.getenv('PROXY_URL')
 if PROXY:
     ytdl_format_options['proxy'] = PROXY
 
-# 3. Handle PO_TOKEN
+# 3. Handle PO_TOKEN & Clients
+# Prioritize Android as it is most successful for audio-only extraction
 PO_TOKEN = os.getenv('PO_TOKEN')
 VISITOR_DATA = os.getenv('VISITOR_DATA')
-if PO_TOKEN and VISITOR_DATA:
-    ytdl_format_options['extractor_args'] = {
-        'youtube': {
-            'player_client': ['web', 'android'],
-            'po_token': [f"web+{PO_TOKEN}"]
-        }
-    }
-else:
-    ytdl_format_options['extractor_args'] = {
-        'youtube': {
-            'player_client': ['web', 'android']
-        }
-    }
 
-# GLOBAL INSTANCE for metadata/cog use
+ytdl_format_options['extractor_args'] = {
+    'youtube': {
+        'player_client': ['android', 'ios', 'web'],
+        'player_skip': ['webpage', 'configs'],
+    }
+}
+
+if PO_TOKEN and VISITOR_DATA:
+    logger.info("PO_TOKEN found, adding to extractor args.")
+    ytdl_format_options['extractor_args']['youtube']['po_token'] = [f"web+{PO_TOKEN}"]
+
+# GLOBAL INSTANCE
 ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
 
 class YTDLSource(discord.PCMVolumeTransformer):
@@ -86,7 +84,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
     async def from_url(cls, url, *, loop=None, stream=False):
         loop = loop or asyncio.get_event_loop()
         try:
-            # We use a fresh instance for the actual extraction to ensure session freshness
+            # Force a fresh instance with the broad format string
             with yt_dlp.YoutubeDL(ytdl_format_options) as ydl_fresh:
                 data = await loop.run_in_executor(None, lambda: ydl_fresh.extract_info(url, download=not stream))
         except Exception as e:
