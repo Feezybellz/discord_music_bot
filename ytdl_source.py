@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger('music_bot.ytdl')
 
 # Custom logger to capture OAuth2 code from yt-dlp
 class OAuthLogger:
@@ -14,14 +15,22 @@ class OAuthLogger:
         self.interaction = interaction
         self.code_found = False
 
-    def debug(self, msg):
+    def log_msg(self, msg):
+        # yt-dlp prints the code to the logger
         if "google.com/device" in msg and not self.code_found:
             self.code_found = True
-            # Send the found link/code to Discord
-            asyncio.run_coroutine_threadsafe(self.interaction.followup.send(f"🔗 **YouTube Login Required!**\n\n{msg}"), self.loop)
+            logger.info(f"CAPTURED OAUTH LINK: {msg}")
+            # Clean up the message to just show the link and code
+            clean_msg = msg.replace("[youtube]", "").strip()
+            asyncio.run_coroutine_threadsafe(
+                self.interaction.followup.send(f"✅ **YouTube Login Link Generated!**\n\n{clean_msg}\n\n*Please follow the link above and enter the code.*"), 
+                self.loop
+            )
 
-    def warning(self, msg): pass
-    def error(self, msg): pass
+    def debug(self, msg): self.log_msg(msg)
+    def info(self, msg): self.log_msg(msg)
+    def warning(self, msg): self.log_msg(msg)
+    def error(self, msg): self.log_msg(msg)
 
 ytdl_format_options = {
     'format': 'bestaudio/best',
@@ -31,8 +40,8 @@ ytdl_format_options = {
     'nocheckcertificate': True,
     'ignoreerrors': False,
     'logtostderr': False,
-    'quiet': True,
-    'no_warnings': True,
+    'quiet': False, # Set to False to ensure we see the OAuth prompt
+    'no_warnings': False,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',

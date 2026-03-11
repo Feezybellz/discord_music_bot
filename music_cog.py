@@ -91,23 +91,28 @@ class MusicBotGroup(app_commands.Group):
         await interaction.response.defer(ephemeral=False)
         try:
             # Create a temporary YTDL instance with a custom logger to capture the code
+            # We force the android client for setup as it is more reliable for OAuth triggers
             opts = {
                 'quiet': False, 
                 'youtube_oauth': True, 
-                'logger': OAuthLogger(self.bot.loop, interaction)
+                'logger': OAuthLogger(self.bot.loop, interaction),
+                'extractor_args': {'youtube': {'player_client': ['android']}}
             }
             
-            await interaction.followup.send("⏳ Requesting login link from YouTube... please wait.")
+            await interaction.followup.send("⏳ Requesting login link from YouTube... please check this channel in a few seconds.")
             
-            # Use run_in_executor without await since we're using create_task
             self.bot.loop.run_in_executor(None, lambda: self._trigger_oauth(opts))
                 
         except Exception as e:
             await interaction.followup.send(f"Setup failed: {e}")
 
     def _trigger_oauth(self, opts):
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.extract_info("https://www.youtube.com/watch?v=5qap5aO4i9A", download=False)
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                # This dummy call will trigger the logger to send the link to Discord
+                ydl.extract_info("https://www.youtube.com/watch?v=5qap5aO4i9A", download=False)
+        except Exception as e:
+            logger.warning(f"OAuth trigger finished with note (this is expected if you haven't logged in yet): {e}")
 
     @app_commands.command(name="play")
     @app_commands.describe(url="YouTube URL")
