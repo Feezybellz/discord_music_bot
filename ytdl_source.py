@@ -30,14 +30,12 @@ ytdl_format_options = {
 }
 
 # 1. DYNAMIC COOKIE DETECTION
-# Priority: 1. .env path, 2. cookies.txt in folder, 3. cookie.txt in folder
 env_cookie_path = os.getenv('COOKIE_PATH')
 found_cookie = None
 
 if env_cookie_path and Path(env_cookie_path).exists():
     found_cookie = env_cookie_path
 else:
-    # Fallback to searching the base directory
     for name in ["cookies.txt", "cookie.txt"]:
         p = BASE_DIR / name
         if p.exists():
@@ -48,7 +46,7 @@ if found_cookie:
     logger.info(f"SUCCESS: Using cookie file at {found_cookie}")
     ytdl_format_options['cookiefile'] = found_cookie
 else:
-    logger.warning("CRITICAL: No cookies found. YouTube will likely block this server IP.")
+    logger.warning("CRITICAL: No cookies found.")
 
 # 2. Handle Proxy
 PROXY = os.getenv('PROXY_URL')
@@ -72,6 +70,9 @@ else:
         }
     }
 
+# GLOBAL INSTANCE for metadata/cog use
+ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
+
 class YTDLSource(discord.PCMVolumeTransformer):
     def __init__(self, source, *, data, volume=0.5):
         super().__init__(source, volume)
@@ -85,9 +86,9 @@ class YTDLSource(discord.PCMVolumeTransformer):
     async def from_url(cls, url, *, loop=None, stream=False):
         loop = loop or asyncio.get_event_loop()
         try:
-            # New instance per request to avoid session sticky blocks
-            with yt_dlp.YoutubeDL(ytdl_format_options) as ydl:
-                data = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=not stream))
+            # We use a fresh instance for the actual extraction to ensure session freshness
+            with yt_dlp.YoutubeDL(ytdl_format_options) as ydl_fresh:
+                data = await loop.run_in_executor(None, lambda: ydl_fresh.extract_info(url, download=not stream))
         except Exception as e:
             raise e
 
