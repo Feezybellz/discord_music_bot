@@ -119,6 +119,27 @@ class MusicBotGroup(app_commands.Group):
             logger.error(f"Error: {e}", exc_info=True)
             await interaction.followup.send(f"An error occurred: {e}")
 
+    @app_commands.command(name="debug_play", description="Directly test YTDL and FFmpeg with a URL.")
+    async def debug_play(self, interaction: discord.Interaction, url: str):
+        await interaction.response.defer()
+        try:
+            logger.info(f"DEBUG_PLAY: Attempting to extract {url}")
+            source = await YTDLSource.from_url(url, loop=self.bot.loop, stream=True)
+            
+            vc = interaction.guild.voice_client
+            if not vc:
+                if interaction.user.voice:
+                    vc = await interaction.user.voice.channel.connect()
+                else:
+                    return await interaction.followup.send("Join a voice channel first!")
+            
+            logger.info(f"DEBUG_PLAY: Playing {source.title}")
+            vc.play(source)
+            await interaction.followup.send(f"Now playing (DEBUG): {source.title}")
+        except Exception as e:
+            logger.error(f"DEBUG_PLAY ERROR: {e}", exc_info=True)
+            await interaction.followup.send(f"DEBUG ERROR: {e}")
+
     @app_commands.command(name="status", description="Shows the bot's current status and permissions.")
     async def status_(self, interaction: discord.Interaction):
         perms = interaction.app_permissions
@@ -135,8 +156,8 @@ class MusicBotGroup(app_commands.Group):
             ("Embed Links", perms.embed_links)
         ]
         
-        perm_str = "\n".join([f"{'✅' if val else '❌'} {name}" for name, val in perm_list])
-        status_embed.add_field(name="Permissions Check", value=perm_str, inline=False)
+        perm_list_str = "\n".join([f"{'✅' if val else '❌'} {name}" for name, val in perm_list])
+        status_embed.add_field(name="Permissions Check", value=perm_list_str, inline=False)
         
         vc = interaction.guild.voice_client
         vc_status = f"Connected to: {vc.channel.name}" if vc else "Not connected to voice."
