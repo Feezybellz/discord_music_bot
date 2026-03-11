@@ -5,13 +5,13 @@ This guide will help you set up the Python Discord Music Bot and configure the e
 ## 1. Prerequisites
 - **Python 3.10+**: Ensure Python is installed on your system.
 - **FFmpeg**: This is **REQUIRED** for audio processing.
-- **Libsodium**: This is **REQUIRED** for Discord voice encryption.
+- **Libsodium & Opus**: Required for Discord voice encryption and encoding.
 
 ### System-Level Dependencies (Linux/Ubuntu)
 Run the following commands to ensure all necessary libraries are installed:
 ```bash
 sudo apt update
-sudo apt install ffmpeg libffi-dev libsodium-dev
+sudo apt install ffmpeg libffi-dev libsodium-dev libopus0
 ```
 
 ### Checking for FFmpeg
@@ -53,6 +53,7 @@ ffmpeg -version
 3. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
+   pip install davey
    ```
 
 ## 4. Environment Configuration
