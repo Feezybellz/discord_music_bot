@@ -2,6 +2,7 @@ import asyncio
 import discord
 import yt_dlp
 import logging
+import os
 
 logger = logging.getLogger('music_bot.ytdl')
 
@@ -17,15 +18,29 @@ ytdl_format_options = {
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
-    'youtube_include_dash_manifest': False,
-    'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
-    'extractor_args': {
+}
+
+# Determine the best way to authenticate/bypass
+cookie_file = None
+if os.path.exists('cookies.txt'):
+    cookie_file = 'cookies.txt'
+elif os.path.exists('cookie.txt'):
+    cookie_file = 'cookie.txt'
+
+if cookie_file:
+    logger.info(f"Found {cookie_file}, using it for authentication.")
+    ytdl_format_options['cookiefile'] = cookie_file
+else:
+    logger.warning("No cookies.txt found. Using mobile spoofing bypass...")
+    # Robust fallback bypass settings
+    ytdl_format_options['youtube_include_dash_manifest'] = False
+    ytdl_format_options['user_agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+    ytdl_format_options['extractor_args'] = {
         'youtube': {
             'player_client': ['ios', 'mweb'],
             'player_skip': ['webpage', 'configs'],
         }
     }
-}
 
 ffmpeg_options = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',

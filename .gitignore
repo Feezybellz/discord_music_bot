@@ -9,6 +9,8 @@ env/
 
 # Logs
 *.log
+cookies.txt
+cookie.txt
 
 # Audio Downloads (if not using streaming)
 *.mp3

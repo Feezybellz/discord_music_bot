@@ -38,7 +38,18 @@ ffmpeg -version
      - OR specifically: `Connect`, `Speak`, `View Channels`, `Send Messages`, `Embed Links`.
 5. **Copy the generated URL** at the bottom, paste it into your browser, and invite the bot to your server.
 
-## 3. Installation
+## 3. YouTube Authentication (Fixing "Sign in to confirm you're not a bot")
+YouTube often blocks automated bots. To bypass this, you can provide your own session cookies:
+1. Install a "Get cookies.txt" extension (Chrome/Firefox).
+2. Log into YouTube in your browser.
+3. Export your cookies in **Netscape format**.
+4. Rename the file to `cookies.txt` or `cookie.txt`.
+5. Place it in the project's root folder (the same folder as `main.py`).
+6. **Privacy Note:** These files are already in `.gitignore` and will never be uploaded to your repository.
+
+*Note: If no cookie file is found, the bot will automatically attempt a "Mobile Spoofing" bypass.*
+
+## 4. Installation
 1. **Clone or navigate to the project directory:**
    ```bash
    cd music_bot
@@ -56,7 +67,7 @@ ffmpeg -version
    pip install davey
    ```
 
-## 4. Environment Configuration
+## 5. Environment Configuration
 1. Open the `.env` file in the root directory.
 2. Replace the placeholders with your actual settings:
    ```env
@@ -64,10 +75,10 @@ ffmpeg -version
    DEBUG_MODE=true
    ```
 
-## 5. Running the Bot
+## 6. Running the Bot
 ```bash
 python3 main.py
 ```
 
 ### Note on Command Prefix
-The bot uses modern **Slash Commands**. After starting the bot, it may take a few minutes for Discord to register the new commands. Look for the `/musicbot` command group in your server.
+The bot uses modern **Slash Commands**. Look for the `/musicbot` command group in your server.
