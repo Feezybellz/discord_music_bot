@@ -98,10 +98,24 @@ def _build_ytdl_options() -> dict:
 ytdl_format_options = _build_ytdl_options()
 ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
 
-FFMPEG_OPTIONS = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'options': '-vn',
-}
+# Build FFmpeg options — proxy must match yt-dlp's proxy so YouTube's
+# signed stream URL (which has the proxy IP baked in) isn't rejected.
+def _build_ffmpeg_options() -> dict:
+    base = '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
+    proxy = os.getenv('PROXY_URL') or os.getenv('YTDL_PROXY')
+    if proxy:
+        # Parse out just host:port from http://user:pass@host:port/
+        import re
+        m = re.search(r'@([^/]+)', proxy)
+        host_port = m.group(1) if m else re.sub(r'https?://', '', proxy).rstrip('/')
+        base += f' -http_proxy {proxy}'
+        logger.info(f'[FFMPEG] Proxy set: {host_port}')
+    return {
+        'before_options': base,
+        'options': '-vn',
+    }
+
+FFMPEG_OPTIONS = _build_ffmpeg_options()
 
 
 class YTDLSource(discord.PCMVolumeTransformer):
