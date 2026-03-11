@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger('music_bot.ytdl')
 
 # Suppress noise about console usage from errors
-yt_dlp.utils.bug_reports_message = lambda: ''
+# Removed the bug_reports_message lambda that was causing errors
 
 ytdl_format_options = {
     'format': 'bestaudio/best',
