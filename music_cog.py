@@ -99,12 +99,15 @@ class MusicBotGroup(app_commands.Group):
             
             await interaction.followup.send("⏳ Requesting login link from YouTube... please wait.")
             
-            # This dummy call will trigger the logger to send the link to Discord
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                await self.bot.loop.run_in_executor(None, lambda: ydl.extract_info("https://www.youtube.com/watch?v=5qap5aO4i9A", download=False))
+            # Use run_in_executor without await since we're using create_task
+            self.bot.loop.run_in_executor(None, lambda: self._trigger_oauth(opts))
                 
         except Exception as e:
             await interaction.followup.send(f"Setup failed: {e}")
+
+    def _trigger_oauth(self, opts):
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.extract_info("https://www.youtube.com/watch?v=5qap5aO4i9A", download=False)
 
     @app_commands.command(name="play")
     @app_commands.describe(url="YouTube URL")
