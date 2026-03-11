@@ -31,7 +31,6 @@ class MusicPlayer:
             self.next.clear()
             
             try:
-                # Python 3.10 FIX: Use wait_for instead of timeout
                 if self.loop_mode == 1 and self.current:
                     source = await asyncio.wait_for(
                         YTDLSource.from_url(self.current.webpage_url, loop=self.bot.loop, stream=True),
@@ -40,7 +39,6 @@ class MusicPlayer:
                 else:
                     source = await asyncio.wait_for(self.queue.get(), timeout=300)
             except asyncio.TimeoutError:
-                logger.info(f"Player timeout in guild {self._guild.id}. Disconnecting.")
                 return self.destroy(self._guild)
             except Exception as e:
                 logger.error(f"Error getting next song: {e}", exc_info=True)
@@ -95,63 +93,76 @@ class MusicBotGroup(app_commands.Group):
             self.players[interaction.guild.id] = player
         return player
 
+    @app_commands.command(name="setup", description="Start the YouTube OAuth2 setup process.")
+    async def setup_yt(self, interaction: discord.Interaction):
+        """Triggers the YouTube OAuth2 flow and sends the instructions to Discord."""
+        await interaction.response.defer(ephemeral=True)
+        try:
+            logger.info("Starting YouTube OAuth2 setup...")
+            # We run a dummy extraction to trigger the OAuth2 prompt
+            # yt-dlp will print the code to the terminal, and we will try to capture it
+            # Note: capturing stdout is tricky, so for now we advise the user to check console
+            # or we use a more direct approach if possible.
+            
+            msg = (
+                "**YouTube Login Setup Initiated!**\n\n"
+                "1. Check your **Server Console/Terminal** for a login code.\n"
+                "2. It will look like: `Go to https://www.google.com/device and enter the code XXX-XXX-XXX`.\n"
+                "3. Once you enter the code in your browser, the bot will be authenticated forever!\n\n"
+                "*Note: You only need to do this once.*"
+            )
+            
+            # This triggers the flow
+            asyncio.create_task(self.bot.loop.run_in_executor(None, lambda: ytdl.extract_info("https://www.youtube.com/watch?v=5qap5aO4i9A", download=False)))
+            
+            await interaction.followup.send(msg)
+        except Exception as e:
+            await interaction.followup.send(f"Failed to start setup: {e}")
+
     @app_commands.command(name="play", description="Plays a song immediately (Clears queue).")
     @app_commands.describe(url="YouTube URL", channel="Voice channel")
     async def play_(self, interaction: discord.Interaction, url: str, channel: Optional[discord.VoiceChannel] = None):
         try:
             await interaction.response.defer()
             player = self.get_player(interaction)
-            
             while not player.queue.empty():
                 player.queue.get_nowait()
-            
             target_channel = channel or (interaction.user.voice.channel if interaction.user.voice else None)
             if not target_channel:
                 return await interaction.followup.send("Join a voice channel first!")
-            
             vc = interaction.guild.voice_client
             if not vc:
                 vc = await target_channel.connect()
             elif vc.channel.id != target_channel.id:
                 await vc.move_to(target_channel)
-            
             if vc.is_playing() or vc.is_paused():
                 vc.stop()
-
             await player.queue.put(url)
             await interaction.followup.send(f"Playing **{url}** immediately.")
         except Exception as e:
             logger.error(f"Error in play command: {e}", exc_info=True)
             await interaction.followup.send(f"Error: {e}")
 
-    @app_commands.command(name="debug_play", description="Directly test YTDL and FFmpeg with a URL.")
+    @app_commands.command(name="debug_play")
     async def debug_play(self, interaction: discord.Interaction, url: str):
         await interaction.response.defer()
         try:
-            logger.info(f"DEBUG_PLAY: Attempting to extract {url}")
             source = await YTDLSource.from_url(url, loop=self.bot.loop, stream=True)
-            
             vc = interaction.guild.voice_client
             if not vc:
-                if interaction.user.voice:
-                    vc = await interaction.user.voice.channel.connect()
-                else:
-                    return await interaction.followup.send("Join a voice channel first!")
-            
-            logger.info(f"DEBUG_PLAY: Playing {source.title}")
+                if interaction.user.voice: vc = await interaction.user.voice.channel.connect()
+                else: return await interaction.followup.send("Join voice first!")
             vc.play(source)
-            await interaction.followup.send(f"Now playing (DEBUG): {source.title}")
+            await interaction.followup.send(f"Playing: {source.title}")
         except Exception as e:
-            logger.error(f"DEBUG_PLAY ERROR: {e}", exc_info=True)
             await interaction.followup.send(f"DEBUG ERROR: {e}")
 
     queue_group = app_commands.Group(name="queue", description="Manage the music queue")
 
-    @queue_group.command(name="add", description="Add a song or playlist to the end of the queue.")
+    @queue_group.command(name="add")
     async def queue_add(self, interaction: discord.Interaction, url: str):
         await interaction.response.defer()
         player = self.get_player(interaction)
-        
         if "list=" in url:
             data = await self.bot.loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False, process=False))
             if 'entries' in data:
@@ -160,16 +171,14 @@ class MusicBotGroup(app_commands.Group):
                     if entry:
                         await player.queue.put(entry['url'])
                         count += 1
-                return await interaction.followup.send(f"Added **{count}** songs to the queue.")
-        
+                return await interaction.followup.send(f"Added **{count}** songs.")
         await player.queue.put(url)
-        await interaction.followup.send(f"Added to queue.")
+        await interaction.followup.send("Added to queue.")
 
-    @queue_group.command(name="list", description="Show the current queue.")
+    @queue_group.command(name="list")
     async def queue_list(self, interaction: discord.Interaction):
         player = self.get_player(interaction)
-        if player.queue.empty():
-            return await interaction.response.send_message("Queue is empty.")
+        if player.queue.empty(): return await interaction.response.send_message("Queue is empty.")
         upcoming = list(itertools.islice(player.queue._queue, 0, 10))
         fmt = '\n'.join(f'**{i+1}.** {song}' for i, song in enumerate(upcoming))
         await interaction.response.send_message(embed=discord.Embed(title="Queue", description=fmt))
@@ -179,16 +188,14 @@ class MusicBotGroup(app_commands.Group):
         if interaction.guild.voice_client and interaction.guild.voice_client.is_playing():
             interaction.guild.voice_client.pause()
             await interaction.response.send_message("Paused.")
-        else:
-            await interaction.response.send_message("Nothing is playing.", ephemeral=True)
+        else: await interaction.response.send_message("Nothing playing.", ephemeral=True)
 
     @app_commands.command(name="resume")
     async def resume_(self, interaction: discord.Interaction):
         if interaction.guild.voice_client and interaction.guild.voice_client.is_paused():
             interaction.guild.voice_client.resume()
             await interaction.response.send_message("Resumed.")
-        else:
-            await interaction.response.send_message("Music is not paused.", ephemeral=True)
+        else: await interaction.response.send_message("Not paused.", ephemeral=True)
 
     @app_commands.command(name="skip")
     async def skip_(self, interaction: discord.Interaction):
@@ -208,8 +215,8 @@ class MusicBotGroup(app_commands.Group):
         status_embed = discord.Embed(title="Bot Status", color=discord.Color.green())
         status_embed.add_field(name="Guilds", value=f"{len(self.bot.guilds)}")
         perm_list = [("Connect", perms.connect), ("Speak", perms.speak)]
-        perm_list_str = "\n".join([f"{'✅' if val else '❌'} {name}" for name, val in perm_list])
-        status_embed.add_field(name="Voice Perms", value=perm_list_str)
+        perm_str = "\n".join([f"{'✅' if val else '❌'} {name}" for name, val in perm_list])
+        status_embed.add_field(name="Voice Perms", value=perm_str)
         await interaction.response.send_message(embed=status_embed)
 
     @app_commands.command(name="loop")
@@ -231,8 +238,7 @@ class Music(commands.Cog):
         self.bot.tree.add_command(music_group)
 
     async def cleanup(self, guild):
-        try:
-            await guild.voice_client.disconnect()
+        try: await guild.voice_client.disconnect()
         except: pass
         try: del self.players[guild.id]
         except: pass
