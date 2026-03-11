@@ -74,7 +74,7 @@ def _build_ytdl_options() -> dict:
         logger.error("[COOKIE] cookiefile NOT set — requests will likely be blocked by YouTube!")
 
     # Optional proxy support — set YTDL_PROXY=http://user:pass@host:port in .env
-    proxy = os.getenv('YTDL_PROXY')
+    proxy = os.getenv('PROXY_URL') or os.getenv('YTDL_PROXY')
     if proxy:
         opts['proxy'] = proxy
         logger.info(f"[PROXY] Using proxy: {proxy}")
