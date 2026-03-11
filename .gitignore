@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env
+
+# Logs
+*.log
+
+# Audio Downloads (if not using streaming)
+*.mp3
+*.m4a
+*.webm
+*.f*
