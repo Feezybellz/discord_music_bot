@@ -17,10 +17,12 @@ ytdl_format_options = {
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
-    # Spoofing as a mobile client is currently the best way to bypass bot detection
+    'youtube_include_dash_manifest': False,
+    'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
     'extractor_args': {
         'youtube': {
-            'player_client': ['android', 'web'],
+            'player_client': ['ios', 'mweb'],
+            'player_skip': ['webpage', 'configs'],
         }
     }
 }
@@ -48,7 +50,6 @@ class YTDLSource(discord.PCMVolumeTransformer):
         logger.debug(f"Starting extraction for URL: {url}")
         
         try:
-            # We use extract_info which will now use the android player client spoofing
             data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
         except Exception as e:
             logger.error(f"YTDL extraction failed: {e}")
