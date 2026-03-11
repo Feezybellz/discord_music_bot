@@ -116,7 +116,7 @@ class Music(commands.Cog):
 
     @app_commands.command(name="play", description="Plays a song from a URL or search term.")
     @app_commands.describe(search="The song name or URL", channel="The voice channel to join (optional)")
-    async def play_(self, interaction: discord.Interaction, search: str, channel: discord.VoiceChannel = None):
+    async def play_(self, interaction: discord.Interaction, search: str, channel: discord.abc.GuildChannel = None):
         """Request a song and add it to the queue."""
         logger.info(f"Play command received: '{search}' from user {interaction.user.id}")
         
@@ -127,6 +127,10 @@ class Music(commands.Cog):
 
             if not vc:
                 if channel:
+                    if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+                        logger.warning(f"Selected channel {channel.name} is not a voice channel.")
+                        return await interaction.followup.send("The selected channel is not a voice channel! Please select a valid one.")
+                    
                     logger.info(f"Connecting to specific channel: {channel.name}")
                     vc = await channel.connect()
                 else:
