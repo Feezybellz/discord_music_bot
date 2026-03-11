@@ -19,10 +19,8 @@ logger = logging.getLogger('music_bot')
 
 class MusicBot(commands.Bot):
     def __init__(self):
-        intents = discord.Intents.default()
-        intents.message_content = True
-        intents.voice_states = True
-        intents.members = True # Ensure members intent is enabled for fetching
+        # We use all intents to be safe against caching issues
+        intents = discord.Intents.all()
         super().__init__(command_prefix='!', intents=intents)
 
     async def setup_hook(self):
@@ -34,6 +32,9 @@ class MusicBot(commands.Bot):
 
     async def on_ready(self):
         logger.info(f'Logged in as {self.user} (ID: {self.user.id})')
+        logger.info(f"Bot is currently in {len(self.guilds)} guilds:")
+        for guild in self.guilds:
+            logger.info(f" - {guild.name} (ID: {guild.id})")
         logger.info('------')
 
 async def main():
