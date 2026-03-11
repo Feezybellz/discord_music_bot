@@ -3,34 +3,14 @@ import discord
 import yt_dlp
 import logging
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
 logger = logging.getLogger('music_bot.ytdl')
 
-# Custom logger to capture OAuth2 code from yt-dlp
-class OAuthLogger:
-    def __init__(self, loop, interaction):
-        self.loop = loop
-        self.interaction = interaction
-        self.code_found = False
-
-    def log_msg(self, msg):
-        # yt-dlp prints the code to the logger
-        if "google.com/device" in msg and not self.code_found:
-            self.code_found = True
-            logger.info(f"CAPTURED OAUTH LINK: {msg}")
-            # Clean up the message to just show the link and code
-            clean_msg = msg.replace("[youtube]", "").strip()
-            asyncio.run_coroutine_threadsafe(
-                self.interaction.followup.send(f"✅ **YouTube Login Link Generated!**\n\n{clean_msg}\n\n*Please follow the link above and enter the code.*"), 
-                self.loop
-            )
-
-    def debug(self, msg): self.log_msg(msg)
-    def info(self, msg): self.log_msg(msg)
-    def warning(self, msg): self.log_msg(msg)
-    def error(self, msg): self.log_msg(msg)
+# Get the directory where THIS file is located
+BASE_DIR = Path(__file__).parent.resolve()
 
 ytdl_format_options = {
     'format': 'bestaudio/best',
@@ -40,24 +20,49 @@ ytdl_format_options = {
     'nocheckcertificate': True,
     'ignoreerrors': False,
     'logtostderr': False,
-    'quiet': False, # Set to False to ensure we see the OAuth prompt
-    'no_warnings': False,
+    'quiet': True,
+    'no_warnings': True,
     'default_search': 'auto',
-    'source_address': '0.0.0.0',
-    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    'youtube_oauth': True
+    'source_address': '0.0.0.0', # Force IPv4
+    # SPECIFIC MOBILE USER AGENT - Proven to work better with mweb client
+    'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
 }
 
-# Handle Proxy if present
-PROXY = os.getenv('PROXY_URL')
-if PROXY:
-    ytdl_format_options['proxy'] = PROXY
+# 1. THE "ULTIMATE" CLIENT COMBO
+ytdl_format_options['extractor_args'] = {
+    'youtube': {
+        'player_client': ['mweb', 'ios'], # mweb is the priority now
+        'player_skip': ['webpage', 'configs'],
+    }
+}
 
-# Handle PO_TOKEN
+# 2. SMART COOKIE DETECTION
+cookie_paths = [
+    BASE_DIR / "cookies.txt",
+    BASE_DIR / "cookie.txt",
+    Path("/home/feezybellz/server/discord_bots/music_bot/cookie.txt"),
+    Path("/var/projects/discord_music_bot/cookie.txt")
+]
+
+found_cookie = None
+for p in cookie_paths:
+    if p.exists():
+        found_cookie = str(p)
+        break
+
+if found_cookie:
+    logger.info(f"SUCCESS: Using cookie file at {found_cookie}")
+    ytdl_format_options['cookiefile'] = found_cookie
+else:
+    logger.warning("CRITICAL: No cookies found.")
+
+# 3. Handle PO_TOKEN
 PO_TOKEN = os.getenv('PO_TOKEN')
 VISITOR_DATA = os.getenv('VISITOR_DATA')
 if PO_TOKEN and VISITOR_DATA:
-    ytdl_format_options['extractor_args'] = {'youtube': {'po_token': [f"web+{PO_TOKEN}"]}}
+    logger.info("PO_TOKEN found, adding to extractor args.")
+    # Add po_token to our existing youtube extractor args
+    ytdl_format_options['extractor_args']['youtube']['po_token'] = [f"web+{PO_TOKEN}"]
 
 ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
 

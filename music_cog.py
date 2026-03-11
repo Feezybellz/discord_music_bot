@@ -4,9 +4,9 @@ from discord import app_commands
 import asyncio
 import itertools
 import logging
+import os
 from typing import Optional, Union
-from ytdl_source import YTDLSource, ytdl, OAuthLogger
-import yt_dlp
+from ytdl_source import YTDLSource, ytdl, BASE_DIR
 
 logger = logging.getLogger('music_bot.music')
 
@@ -86,33 +86,39 @@ class MusicBotGroup(app_commands.Group):
             self.players[interaction.guild.id] = player
         return player
 
-    @app_commands.command(name="setup", description="Get the YouTube OAuth2 login link.")
-    async def setup_yt(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
+    @app_commands.command(name="check", description="Verify if the bot can see your cookie.txt file.")
+    async def check_setup(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         try:
-            # Create a temporary YTDL instance with a custom logger to capture the code
-            # We force the android client for setup as it is more reliable for OAuth triggers
-            opts = {
-                'quiet': False, 
-                'youtube_oauth': True, 
-                'logger': OAuthLogger(self.bot.loop, interaction),
-                'extractor_args': {'youtube': {'player_client': ['android']}}
-            }
+            expected_paths = [
+                os.path.join(BASE_DIR, "cookies.txt"),
+                os.path.join(BASE_DIR, "cookie.txt")
+            ]
             
-            await interaction.followup.send("⏳ Requesting login link from YouTube... please check this channel in a few seconds.")
+            found = "❌ None"
+            for p in expected_paths:
+                if os.path.exists(p):
+                    found = f"✅ Found at: {p}"
+                    break
             
-            self.bot.loop.run_in_executor(None, lambda: self._trigger_oauth(opts))
-                
-        except Exception as e:
-            await interaction.followup.send(f"Setup failed: {e}")
+            # Internal yt-dlp config check
+            ytdl_cookie = ytdl.params.get('cookiefile', '❌ Not loaded in yt-dlp')
+            ytdl_ua = ytdl.params.get('user_agent', 'Default')
+            ytdl_clients = ytdl.params.get('extractor_args', {}).get('youtube', {}).get('player_client', 'Default')
 
-    def _trigger_oauth(self, opts):
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                # This dummy call will trigger the logger to send the link to Discord
-                ydl.extract_info("https://www.youtube.com/watch?v=5qap5aO4i9A", download=False)
+            status = (
+                f"📂 **System Check**\n"
+                f"Base Dir: `{BASE_DIR}`\n"
+                f"File Status: {found}\n\n"
+                f"⚙️ **yt-dlp Internal Config**\n"
+                f"Cookie Path: `{ytdl_cookie}`\n"
+                f"User-Agent: `{ytdl_ua}`\n"
+                f"Player Clients: `{ytdl_clients}`\n\n"
+                f"*If File Status is ✅ but Cookie Path is ❌, restart the bot.*"
+            )
+            await interaction.followup.send(status)
         except Exception as e:
-            logger.warning(f"OAuth trigger finished with note (this is expected if you haven't logged in yet): {e}")
+            await interaction.followup.send(f"Error during check: {e}")
 
     @app_commands.command(name="play")
     @app_commands.describe(url="YouTube URL")
