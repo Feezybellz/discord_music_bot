@@ -90,11 +90,9 @@ class MusicBotGroup(app_commands.Group):
             await interaction.response.defer()
             player = self.get_player(interaction)
             
-            # 1. Clear current queue
             while not player.queue.empty():
                 player.queue.get_nowait()
             
-            # 2. Join voice if needed
             target_channel = channel or (interaction.user.voice.channel if interaction.user.voice else None)
             if not target_channel:
                 return await interaction.followup.send("Join a voice channel first!")
@@ -103,7 +101,6 @@ class MusicBotGroup(app_commands.Group):
             if not vc:
                 vc = await target_channel.connect()
             
-            # 3. Stop current playback to force immediate start of the new one
             if vc.is_playing() or vc.is_paused():
                 vc.stop()
 
@@ -111,6 +108,27 @@ class MusicBotGroup(app_commands.Group):
             await interaction.followup.send(f"Playing **{url}** immediately.")
         except Exception as e:
             await interaction.followup.send(f"Error: {e}")
+
+    @app_commands.command(name="debug_play", description="Directly test YTDL and FFmpeg with a URL.")
+    async def debug_play(self, interaction: discord.Interaction, url: str):
+        await interaction.response.defer()
+        try:
+            logger.info(f"DEBUG_PLAY: Attempting to extract {url}")
+            source = await YTDLSource.from_url(url, loop=self.bot.loop, stream=True)
+            
+            vc = interaction.guild.voice_client
+            if not vc:
+                if interaction.user.voice:
+                    vc = await interaction.user.voice.channel.connect()
+                else:
+                    return await interaction.followup.send("Join a voice channel first!")
+            
+            logger.info(f"DEBUG_PLAY: Playing {source.title}")
+            vc.play(source)
+            await interaction.followup.send(f"Now playing (DEBUG): {source.title}")
+        except Exception as e:
+            logger.error(f"DEBUG_PLAY ERROR: {e}", exc_info=True)
+            await interaction.followup.send(f"DEBUG ERROR: {e}")
 
     # Sub-group for queue management
     queue_group = app_commands.Group(name="queue", description="Manage the music queue")
@@ -142,17 +160,54 @@ class MusicBotGroup(app_commands.Group):
         fmt = '\n'.join(f'**{i+1}.** {song}' for i, song in enumerate(upcoming))
         await interaction.response.send_message(embed=discord.Embed(title="Queue", description=fmt))
 
-    @app_commands.command(name="stop")
-    async def stop_(self, interaction: discord.Interaction):
-        cog = self.bot.get_cog("Music")
-        await cog.cleanup(interaction.guild)
-        await interaction.response.send_message("Stopped.")
+    @app_commands.command(name="pause")
+    async def pause_(self, interaction: discord.Interaction):
+        if interaction.guild.voice_client and interaction.guild.voice_client.is_playing():
+            interaction.guild.voice_client.pause()
+            await interaction.response.send_message("Paused.")
+        else:
+            await interaction.response.send_message("Nothing is playing.", ephemeral=True)
+
+    @app_commands.command(name="resume")
+    async def resume_(self, interaction: discord.Interaction):
+        if interaction.guild.voice_client and interaction.guild.voice_client.is_paused():
+            interaction.guild.voice_client.resume()
+            await interaction.response.send_message("Resumed.")
+        else:
+            await interaction.response.send_message("Music is not paused.", ephemeral=True)
 
     @app_commands.command(name="skip")
     async def skip_(self, interaction: discord.Interaction):
         if interaction.guild.voice_client:
             interaction.guild.voice_client.stop()
             await interaction.response.send_message("Skipped.")
+
+    @app_commands.command(name="stop")
+    async def stop_(self, interaction: discord.Interaction):
+        cog = self.bot.get_cog("Music")
+        await cog.cleanup(interaction.guild)
+        await interaction.response.send_message("Stopped.")
+
+    @app_commands.command(name="status")
+    async def status_(self, interaction: discord.Interaction):
+        perms = interaction.app_permissions
+        status_embed = discord.Embed(title="Bot Status", color=discord.Color.green())
+        status_embed.add_field(name="Guilds", value=f"{len(self.bot.guilds)}")
+        perm_list = [("Connect", perms.connect), ("Speak", perms.speak)]
+        perm_str = "\n".join([f"{'✅' if val else '❌'} {name}" for name, val in perm_list])
+        status_embed.add_field(name="Voice Perms", value=perm_str)
+        await interaction.response.send_message(embed=status_embed)
+
+    @app_commands.command(name="loop")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="Off", value=0),
+        app_commands.Choice(name="Track", value=1),
+        app_commands.Choice(name="Queue", value=2),
+    ])
+    async def loop_(self, interaction: discord.Interaction, mode: app_commands.Choice[int]):
+        player = self.get_player(interaction)
+        player.loop_mode = mode.value
+        await interaction.response.send_message(f"Loop set to {mode.name}.")
 
 class Music(commands.Cog):
     def __init__(self, bot):
