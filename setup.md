@@ -55,6 +55,7 @@ DISCORD_TOKEN=your_bot_token
 DEBUG_MODE=true
 PO_TOKEN=paste_your_poToken_here
 VISITOR_DATA=paste_your_visitorData_here
+PROXY_URL=http://user:pass@host:port (Optional: For bypassing IP blocks)
 ```
 
 ## 6. Commands Reference

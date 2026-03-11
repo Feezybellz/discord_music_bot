@@ -3,7 +3,9 @@ import discord
 import yt_dlp
 import logging
 import os
+from dotenv import load_dotenv
 
+load_dotenv()
 logger = logging.getLogger('music_bot.ytdl')
 
 ytdl_format_options = {
@@ -17,11 +19,17 @@ ytdl_format_options = {
     'quiet': True,
     'no_warnings': True,
     'default_search': 'auto',
-    'source_address': '0.0.0.0', # FORCE IPv4
+    'source_address': '0.0.0.0',
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 }
 
-# 1. Handle Cookies
+# 1. Handle Proxy
+PROXY = os.getenv('PROXY_URL')
+if PROXY:
+    logger.info(f"Using proxy: {PROXY}")
+    ytdl_format_options['proxy'] = PROXY
+
+# 2. Handle Cookies
 cookie_file = None
 if os.path.exists('cookies.txt'):
     cookie_file = 'cookies.txt'
@@ -32,7 +40,7 @@ if cookie_file:
     logger.info(f"Using {cookie_file} for authentication.")
     ytdl_format_options['cookiefile'] = cookie_file
 
-# 2. Advanced Bypass (PO Token & Clients)
+# 3. Advanced Bypass (PO Token & Clients)
 ytdl_format_options['extractor_args'] = {
     'youtube': {
         'player_client': ['android', 'ios', 'mweb'],
@@ -40,9 +48,7 @@ ytdl_format_options['extractor_args'] = {
     }
 }
 
-# 3. Handle PO_TOKEN if present in .env
-from dotenv import load_dotenv
-load_dotenv()
+# 4. Handle PO_TOKEN
 PO_TOKEN = os.getenv('PO_TOKEN')
 VISITOR_DATA = os.getenv('VISITOR_DATA')
 
