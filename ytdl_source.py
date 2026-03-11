@@ -24,14 +24,14 @@ ytdl_format_options = {
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0', # Force IPv4
-    # SPECIFIC MOBILE USER AGENT - Proven to work better with mweb client
-    'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+    # DESKTOP USER AGENT - Matches standard Chrome/Edge on Windows
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 }
 
 # 1. THE "ULTIMATE" CLIENT COMBO
 ytdl_format_options['extractor_args'] = {
     'youtube': {
-        'player_client': ['mweb', 'ios'], # mweb is the priority now
+        'player_client': ['web', 'android'], # Use web as primary for desktop cookies
         'player_skip': ['webpage', 'configs'],
     }
 }
