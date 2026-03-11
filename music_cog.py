@@ -31,7 +31,7 @@ class MusicPlayer:
             self.next.clear()
             
             try:
-                # Python 3.10 compatible timeout
+                # Python 3.10 FIX: Use wait_for instead of timeout
                 if self.loop_mode == 1 and self.current:
                     source = await asyncio.wait_for(
                         YTDLSource.from_url(self.current.webpage_url, loop=self.bot.loop, stream=True),
