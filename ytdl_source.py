@@ -10,31 +10,19 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger('music_bot.ytdl')
 
-# BASE_DIR is always the folder that contains THIS file (ytdl_source.py)
 BASE_DIR = Path(__file__).resolve().parent
 
 
-# ── URL normaliser ────────────────────────────────────────────────────────────
 def normalize_url(url: str) -> str:
-    """Convert music.youtube.com URLs → www.youtube.com so yt-dlp lists all formats."""
+    """Convert music.youtube.com URLs → www.youtube.com."""
     return re.sub(r'music\.youtube\.com', 'www.youtube.com', url)
 
 
-# ── Cookie detection (runs once at import time) ───────────────────────────────
 def _find_cookie_file() -> str | None:
-    """
-    Search priority:
-      1. COOKIE_PATH env var
-      2. cookies.txt  next to this file
-      3. cookie.txt   next to this file   ← your actual filename
-    Logs every path it tries so you can see exactly what's happening.
-    """
     candidates = []
-
     env_path = os.getenv('COOKIE_PATH')
     if env_path:
         candidates.append(Path(env_path))
-
     for name in ('cookies.txt', 'cookie.txt'):
         candidates.append(BASE_DIR / name)
 
@@ -44,20 +32,24 @@ def _find_cookie_file() -> str | None:
             logger.info(f"Cookie file selected: {p}")
             return str(p)
 
-    logger.warning(
-        "No cookie file found. Requests may be blocked by YouTube's bot-detection.\n"
-        f"  Place cookie.txt in: {BASE_DIR}"
-    )
+    logger.warning(f"No cookie file found. Place cookie.txt in: {BASE_DIR}")
     return None
 
 
 COOKIE_FILE = _find_cookie_file()
+PROXY_URL = os.getenv('PROXY_URL')
+
+if PROXY_URL:
+    logger.info(f"Proxy loaded: {PROXY_URL.split('@')[-1]}")  # log host only, hide credentials
+else:
+    logger.warning(
+        "No PROXY_URL set. On datacenter IPs (Azure/AWS/GCP), YouTube will block requests. "
+        "Set PROXY_URL=http://user:pass@host:port in your .env file."
+    )
 
 
-# ── Build yt-dlp options ──────────────────────────────────────────────────────
 def _build_ytdl_options() -> dict:
     opts = {
-        # Broad fallback chain so any available audio format works
         'format': 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best[acodec!=none]/best',
         'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
         'restrictfilenames': True,
@@ -76,18 +68,19 @@ def _build_ytdl_options() -> dict:
         ),
     }
 
-    # Cookies — MUST be set for age-gated / bot-check videos
     if COOKIE_FILE:
         opts['cookiefile'] = COOKIE_FILE
 
-    # Client list — do NOT add player_skip; it prevents format discovery
+    # Route through residential proxy to bypass datacenter IP blocks
+    if PROXY_URL:
+        opts['proxy'] = PROXY_URL
+
     extractor_args: dict = {
         'youtube': {
             'player_client': ['music', 'ios', 'web', 'android', 'mweb'],
         }
     }
 
-    # Optional PO token
     po_token = os.getenv('PO_TOKEN')
     if po_token:
         token_val = po_token if po_token.startswith('web+') else f'web+{po_token}'
@@ -99,8 +92,6 @@ def _build_ytdl_options() -> dict:
 
 
 ytdl_format_options = _build_ytdl_options()
-
-# Shared instance (used only for prepare_filename in non-stream mode)
 ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
 
 FFMPEG_OPTIONS = {
@@ -109,7 +100,6 @@ FFMPEG_OPTIONS = {
 }
 
 
-# ── YTDLSource ────────────────────────────────────────────────────────────────
 class YTDLSource(discord.PCMVolumeTransformer):
     def __init__(self, source, *, data, volume=0.5):
         super().__init__(source, volume)
@@ -122,13 +112,10 @@ class YTDLSource(discord.PCMVolumeTransformer):
     @classmethod
     async def from_url(cls, url: str, *, loop=None, stream: bool = False):
         loop = loop or asyncio.get_event_loop()
-
-        # Normalise YouTube Music URLs before extraction
         url = normalize_url(url)
         logger.debug(f"Extracting info for: {url}")
 
         try:
-            # Fresh instance every request — avoids stale format cache
             with yt_dlp.YoutubeDL(ytdl_format_options) as ydl:
                 data = await loop.run_in_executor(
                     None, lambda: ydl.extract_info(url, download=not stream)
@@ -141,9 +128,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             raise
 
         if data is None:
-            raise RuntimeError(
-                "yt-dlp returned no data. The video may be unavailable or geo-restricted."
-            )
+            raise RuntimeError("yt-dlp returned no data. The video may be unavailable or geo-restricted.")
 
         if 'entries' in data:
             data = data['entries'][0]
