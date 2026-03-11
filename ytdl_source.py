@@ -9,11 +9,9 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger('music_bot.ytdl')
 
-# Get the directory where THIS file is located
 BASE_DIR = Path(__file__).parent.resolve()
 
 ytdl_format_options = {
-    # Broaden format to find ANY playable audio
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
     'restrictfilenames': True,
@@ -24,51 +22,41 @@ ytdl_format_options = {
     'quiet': True,
     'no_warnings': True,
     'default_search': 'auto',
-    'source_address': '0.0.0.0', # Force IPv4
-    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'source_address': '0.0.0.0',
+    'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
     'youtube_include_dash_manifest': False,
-    'youtube_include_hls_manifest': False,
 }
 
 # 1. DYNAMIC COOKIE DETECTION
 env_cookie_path = os.getenv('COOKIE_PATH')
 found_cookie = None
-
 if env_cookie_path and Path(env_cookie_path).exists():
     found_cookie = env_cookie_path
 else:
     for name in ["cookies.txt", "cookie.txt"]:
-        p = BASE_DIR / name
-        if p.exists():
-            found_cookie = str(p)
+        if (BASE_DIR / name).exists():
+            found_cookie = str(BASE_DIR / name)
             break
 
 if found_cookie:
     logger.info(f"SUCCESS: Using cookie file at {found_cookie}")
     ytdl_format_options['cookiefile'] = found_cookie
 
-# 2. Handle Proxy
-PROXY = os.getenv('PROXY_URL')
-if PROXY:
-    ytdl_format_options['proxy'] = PROXY
-
-# 3. Handle PO_TOKEN & Clients
-# Prioritize Android as it is most successful for audio-only extraction
-PO_TOKEN = os.getenv('PO_TOKEN')
-VISITOR_DATA = os.getenv('VISITOR_DATA')
-
+# 2. CLIENT PRIORITY - ios/mweb are currently best for server IPs
 ytdl_format_options['extractor_args'] = {
     'youtube': {
-        'player_client': ['android', 'ios', 'web'],
+        'player_client': ['ios', 'mweb', 'android', 'web'],
         'player_skip': ['webpage', 'configs'],
     }
 }
 
-if PO_TOKEN and VISITOR_DATA:
-    logger.info("PO_TOKEN found, adding to extractor args.")
-    ytdl_format_options['extractor_args']['youtube']['po_token'] = [f"web+{PO_TOKEN}"]
+# 3. PO TOKEN
+PO_TOKEN = os.getenv('PO_TOKEN')
+if PO_TOKEN:
+    # Ensure it uses the correct prefix
+    token_val = f"web+{PO_TOKEN}" if not PO_TOKEN.startswith("web+") else PO_TOKEN
+    ytdl_format_options['extractor_args']['youtube']['po_token'] = [token_val]
 
-# GLOBAL INSTANCE
 ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
 
 class YTDLSource(discord.PCMVolumeTransformer):
@@ -84,7 +72,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
     async def from_url(cls, url, *, loop=None, stream=False):
         loop = loop or asyncio.get_event_loop()
         try:
-            # Force a fresh instance with the broad format string
+            # Always use a fresh instance to avoid session stickiness
             with yt_dlp.YoutubeDL(ytdl_format_options) as ydl_fresh:
                 data = await loop.run_in_executor(None, lambda: ydl_fresh.extract_info(url, download=not stream))
         except Exception as e:
