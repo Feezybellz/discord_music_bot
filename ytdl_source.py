@@ -14,7 +14,6 @@ BASE_DIR = Path(__file__).resolve().parent
 
 
 def normalize_url(url: str) -> str:
-    """Convert music.youtube.com URLs → www.youtube.com so yt-dlp lists all formats."""
     return re.sub(r'music\.youtube\.com', 'www.youtube.com', url)
 
 
@@ -25,12 +24,23 @@ def _find_cookie_file() -> str | None:
         candidates.append(Path(env_path))
     for name in ('cookies.txt', 'cookie.txt'):
         candidates.append(BASE_DIR / name)
+
     for p in candidates:
-        logger.info(f"Cookie search: trying {p} ... {'FOUND' if p.exists() else 'not found'}")
-        if p.exists():
-            logger.info(f"Cookie file selected: {p}")
+        exists = p.exists()
+        size = p.stat().st_size if exists else 0
+        logger.info(f"[COOKIE CHECK] {p} -> exists={exists}, size={size}b")
+        if exists and size > 0:
+            logger.info(f"[COOKIE] SELECTED: {p}")
             return str(p)
-    logger.warning(f"No cookie file found. Place cookie.txt in: {BASE_DIR}")
+        elif exists and size == 0:
+            logger.warning(f"[COOKIE] Found but EMPTY: {p} — skipping")
+
+    logger.error(
+        f"[COOKIE] No valid cookie file found!\n"
+        f"  BASE_DIR={BASE_DIR}\n"
+        f"  cwd={os.getcwd()}\n"
+        f"  Files in BASE_DIR: {list(BASE_DIR.iterdir())}"
+    )
     return None
 
 
@@ -39,9 +49,7 @@ COOKIE_FILE = _find_cookie_file()
 
 def _build_ytdl_options() -> dict:
     opts = {
-        # itag=18 is a combined video/audio mp4 — always IP-unlocked on android client
-        # We prefer audio-only but fall all the way back to itag 18 if needed
-        'format': 'bestaudio[protocol^=https]/bestaudio/best[acodec!=none]/best',
+        'format': 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best[acodec!=none]/best',
         'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
         'restrictfilenames': True,
         'noplaylist': True,
@@ -61,22 +69,29 @@ def _build_ytdl_options() -> dict:
 
     if COOKIE_FILE:
         opts['cookiefile'] = COOKIE_FILE
+        logger.info(f"[COOKIE] cookiefile set in yt-dlp opts: {COOKIE_FILE}")
+    else:
+        logger.error("[COOKIE] cookiefile NOT set — requests will likely be blocked by YouTube!")
 
-    # KEY FIX: Use ONLY the android client.
-    # Android client streams are NOT IP-locked — the signed URL works from any IP.
-    # web/ios/mweb clients produce IP-locked URLs that fail with 403 on cloud VMs.
-    opts['extractor_args'] = {
+    # Optional proxy support — set YTDL_PROXY=http://user:pass@host:port in .env
+    proxy = os.getenv('YTDL_PROXY')
+    if proxy:
+        opts['proxy'] = proxy
+        logger.info(f"[PROXY] Using proxy: {proxy}")
+
+    extractor_args: dict = {
         'youtube': {
-            'player_client': ['android'],
+            'player_client': ['music', 'ios', 'web', 'android', 'mweb'],
         }
     }
 
     po_token = os.getenv('PO_TOKEN')
     if po_token:
         token_val = po_token if po_token.startswith('web+') else f'web+{po_token}'
-        opts['extractor_args']['youtube']['po_token'] = [token_val]
-        logger.info('PO Token loaded.')
+        extractor_args['youtube']['po_token'] = [token_val]
+        logger.info('[PO_TOKEN] Loaded.')
 
+    opts['extractor_args'] = extractor_args
     return opts
 
 
@@ -102,7 +117,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
     async def from_url(cls, url: str, *, loop=None, stream: bool = False):
         loop = loop or asyncio.get_event_loop()
         url = normalize_url(url)
-        logger.debug(f"Extracting info for: {url}")
+        logger.info(f"[YTDL] from_url called: {url} | cookie={COOKIE_FILE}")
 
         try:
             with yt_dlp.YoutubeDL(ytdl_format_options) as ydl:
@@ -110,14 +125,14 @@ class YTDLSource(discord.PCMVolumeTransformer):
                     None, lambda: ydl.extract_info(url, download=not stream)
                 )
         except yt_dlp.utils.DownloadError as e:
-            logger.error(f"yt-dlp DownloadError for {url}: {e}")
+            logger.error(f"[YTDL] DownloadError: {e}")
             raise RuntimeError(f"Could not retrieve audio: {e}") from e
         except Exception as e:
-            logger.error(f"Unexpected error extracting {url}: {e}")
+            logger.error(f"[YTDL] Unexpected error: {e}")
             raise
 
         if data is None:
-            raise RuntimeError("yt-dlp returned no data. The video may be unavailable or geo-restricted.")
+            raise RuntimeError("yt-dlp returned no data. Video may be unavailable or geo-restricted.")
 
         if 'entries' in data:
             data = data['entries'][0]

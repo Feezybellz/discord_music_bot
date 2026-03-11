@@ -5,8 +5,8 @@ import asyncio
 import itertools
 import logging
 import os
-from typing import Optional, Union
-from ytdl_source import YTDLSource, ytdl, BASE_DIR
+from typing import Optional
+from ytdl_source import YTDLSource, ytdl, BASE_DIR, COOKIE_FILE, ytdl_format_options
 
 logger = logging.getLogger('music_bot.music')
 
@@ -55,7 +55,7 @@ class MusicPlayer:
                 embed = discord.Embed(title="Now Playing", description=f"[{source.title}]({source.webpage_url})", color=discord.Color.blue())
                 self.np = await self._channel.send(embed=embed)
                 await self.next.wait()
-            
+
             source.cleanup()
             self.current = None
             if self.loop_mode == 2:
@@ -63,6 +63,7 @@ class MusicPlayer:
 
     def destroy(self, guild):
         return self.bot.loop.create_task(self._cog.cleanup(guild))
+
 
 class MusicBotGroup(app_commands.Group):
     def __init__(self, bot, players):
@@ -86,38 +87,42 @@ class MusicBotGroup(app_commands.Group):
             self.players[interaction.guild.id] = player
         return player
 
-    @app_commands.command(name="check", description="Verify if the bot can see your cookie.txt file.")
+    @app_commands.command(name="check", description="Full diagnostic: cookie, proxy, PO token status.")
     async def check_setup(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         try:
-            expected_paths = [
-                os.path.join(BASE_DIR, "cookies.txt"),
-                os.path.join(BASE_DIR, "cookie.txt")
-            ]
-            
-            found = "❌ None"
-            for p in expected_paths:
-                if os.path.exists(p):
-                    found = f"✅ Found at: {p}"
-                    break
-            
-            # Internal yt-dlp config check
-            ytdl_cookie = ytdl.params.get('cookiefile', '❌ Not loaded')
-            ytdl_clients = ytdl.params.get('extractor_args', {}).get('youtube', {}).get('player_client', 'Default')
-            
-            # PO Token check
-            po_token = os.getenv('PO_TOKEN')
-            po_status = "✅ Present" if po_token else "❌ Missing (Highly recommended for servers)"
+            # Cookie file
+            if COOKIE_FILE:
+                from pathlib import Path
+                p = Path(COOKIE_FILE)
+                size = p.stat().st_size if p.exists() else 0
+                cookie_status = f"✅ `{COOKIE_FILE}` ({size} bytes)"
+            else:
+                cookie_status = f"❌ Not found — place `cookie.txt` next to `ytdl_source.py`\n   Looking in: `{BASE_DIR}`"
+
+            # Proxy
+            proxy = os.getenv('YTDL_PROXY')
+            proxy_status = f"✅ `{proxy}`" if proxy else "⚠️ Not set (may be needed on cloud VMs)"
+
+            # PO Token
+            po = os.getenv('PO_TOKEN')
+            po_status = "✅ Present" if po else "⚠️ Not set"
+
+            # yt-dlp internal confirm
+            ytdl_cookie = ytdl_format_options.get('cookiefile', '❌ Not in opts')
+            ytdl_clients = ytdl_format_options.get('extractor_args', {}).get('youtube', {}).get('player_client', 'Default')
 
             status = (
-                f"📂 **System Check**\n"
+                f"📂 **File Paths**\n"
                 f"Base Dir: `{BASE_DIR}`\n"
-                f"File Status: {found}\n"
-                f"PO Token: {po_status}\n\n"
+                f"Working Dir: `{os.getcwd()}`\n\n"
+                f"🍪 **Cookie File**\n{cookie_status}\n\n"
+                f"🌐 **Proxy** (for cloud/datacenter VMs)\n{proxy_status}\n\n"
+                f"🔑 **PO Token**\n{po_status}\n\n"
                 f"⚙️ **yt-dlp Internal Config**\n"
-                f"Cookie Path: `{ytdl_cookie}`\n"
-                f"Player Clients: `{ytdl_clients}`\n\n"
-                f"*If any value looks wrong, restart the bot entirely.*"
+                f"cookiefile: `{ytdl_cookie}`\n"
+                f"player_clients: `{ytdl_clients}`\n\n"
+                f"*Restart the bot after any changes.*"
             )
             await interaction.followup.send(status)
         except Exception as e:
@@ -142,6 +147,7 @@ class MusicBotGroup(app_commands.Group):
             await interaction.followup.send(f"Error: {e}")
 
     queue_group = app_commands.Group(name="queue", description="Queue commands")
+
     @queue_group.command(name="add")
     async def queue_add(self, interaction: discord.Interaction, url: str):
         await interaction.response.defer()
@@ -167,6 +173,7 @@ class MusicBotGroup(app_commands.Group):
         if interaction.guild.voice_client: interaction.guild.voice_client.stop()
         await interaction.response.send_message("Skipped.")
 
+
 class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -178,6 +185,7 @@ class Music(commands.Cog):
         except: pass
         try: del self.players[guild.id]
         except: pass
+
 
 async def setup(bot):
     await bot.add_cog(Music(bot))
