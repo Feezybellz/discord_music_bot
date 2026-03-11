@@ -1,6 +1,9 @@
 import asyncio
 import discord
 import yt_dlp
+import logging
+
+logger = logging.getLogger('music_bot.ytdl')
 
 # Suppress noise about console usage from errors
 yt_dlp.utils.bug_reports_message = lambda: ''
@@ -39,11 +42,18 @@ class YTDLSource(discord.PCMVolumeTransformer):
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
         loop = loop or asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
+        logger.debug(f"Starting extraction for URL: {url}")
+        
+        try:
+            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
+        except Exception as e:
+            logger.error(f"YTDL extraction failed: {e}")
+            raise
 
         if 'entries' in data:
-            # take first item from a playlist
+            logger.debug("Playlist detected, choosing first entry.")
             data = data['entries'][0]
 
         filename = data['url'] if stream else ytdl.prepare_filename(data)
+        logger.info(f"Source prepared: {data.get('title')}")
         return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)

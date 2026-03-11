@@ -3,7 +3,10 @@ from discord.ext import commands
 from discord import app_commands
 import asyncio
 import itertools
+import logging
 from ytdl_source import YTDLSource
+
+logger = logging.getLogger('music_bot.music')
 
 class MusicPlayer:
     """A class which is assigned to each guild using the bot for Music.
@@ -39,18 +42,21 @@ class MusicPlayer:
                 # Wait for the next song. If we timeout cancel the player and disconnect...
                 async with asyncio.timeout(300):  # 5 minutes
                     if self.loop_mode == 1 and self.current:
-                        # Re-use the current source for track loop
+                        logger.debug(f"Loop mode is TRACK. Re-playing: {self.current.title}")
                         source = await YTDLSource.from_url(self.current.webpage_url, loop=self.bot.loop, stream=True)
                     else:
+                        logger.debug("Waiting for next song from queue...")
                         source = await self.queue.get()
             except asyncio.TimeoutError:
+                logger.info(f"Player timeout in guild {self._guild.id}. Cleaning up.")
                 return self.destroy(self._guild)
 
             if not isinstance(source, YTDLSource):
-                # Source was probably a stream (not downloaded)
                 try:
+                    logger.info(f"Extracting source for: {source}")
                     source = await YTDLSource.from_url(source, loop=self.bot.loop, stream=True)
                 except Exception as e:
+                    logger.error(f"Error processing song: {e}", exc_info=True)
                     await self._channel.send(f'There was an error processing your song.\n'
                                              f'```css\n[{e}]\n```')
                     continue
@@ -58,6 +64,7 @@ class MusicPlayer:
             source.volume = self.volume
             self.current = source
 
+            logger.info(f"Playing track: {source.title} in guild {self._guild.id}")
             self._guild.voice_client.play(source, after=lambda _: self.bot.loop.call_soon_threadsafe(self.next.set))
             
             embed = discord.Embed(title="Now Playing", description=f"[{source.title}]({source.webpage_url})", color=discord.Color.blue())
@@ -66,12 +73,11 @@ class MusicPlayer:
             
             await self.next.wait()
 
-            # Make sure the FFmpeg process is cleaned up.
             source.cleanup()
             self.current = None
 
             if self.loop_mode == 2:
-                # Add the finished song back to the end of the queue for queue loop
+                logger.debug(f"Loop mode is QUEUE. Adding {source.webpage_url} back to queue.")
                 await self.queue.put(source.webpage_url)
 
     def destroy(self, guild):
@@ -112,31 +118,41 @@ class Music(commands.Cog):
     @app_commands.describe(search="The song name or URL", channel="The voice channel to join (optional)")
     async def play_(self, interaction: discord.Interaction, search: str, channel: discord.VoiceChannel = None):
         """Request a song and add it to the queue."""
-        await interaction.response.defer()
+        logger.info(f"Play command received: '{search}' from user {interaction.user.id}")
         
-        vc = interaction.guild.voice_client
+        try:
+            await interaction.response.defer()
+            
+            vc = interaction.guild.voice_client
 
-        if not vc:
-            # If a specific channel was provided, join it
-            if channel:
-                vc = await channel.connect()
-            else:
-                # Otherwise, try to find the member's current voice channel
-                member = interaction.guild.get_member(interaction.user.id)
-                if not member or not member.voice:
-                    member = await interaction.guild.fetch_member(interaction.user.id)
-
-                if member.voice:
-                    vc = await member.voice.channel.connect()
+            if not vc:
+                if channel:
+                    logger.info(f"Connecting to specific channel: {channel.name}")
+                    vc = await channel.connect()
                 else:
-                    return await interaction.followup.send("Please either mention a voice channel or join one yourself!")
+                    logger.debug("No channel specified, searching for user's voice channel...")
+                    member = interaction.guild.get_member(interaction.user.id)
+                    if not member or not member.voice:
+                        member = await interaction.guild.fetch_member(interaction.user.id)
 
-        player = self.get_player(interaction)
+                    if member.voice:
+                        logger.info(f"Connecting to user's channel: {member.voice.channel.name}")
+                        vc = await member.voice.channel.connect()
+                    else:
+                        logger.warning(f"User {interaction.user.id} not in voice and no channel provided.")
+                        return await interaction.followup.send("Please either mention a voice channel or join one yourself!")
 
-        # If download is False, source will be a dict which will be used to extract info later in the player loop.
-        # For simplicity in this example, we just pass the search term to the player loop.
-        await player.queue.put(search)
-        await interaction.followup.send(f"Added **{search}** to the queue.")
+            player = self.get_player(interaction)
+
+            await player.queue.put(search)
+            logger.info(f"Added '{search}' to queue in guild {interaction.guild.id}")
+            await interaction.followup.send(f"Added **{search}** to the queue.")
+        except Exception as e:
+            logger.error(f"Exception in play command: {e}", exc_info=True)
+            if not interaction.response.is_done():
+                await interaction.response.send_message("An internal error occurred while processing your request.")
+            else:
+                await interaction.followup.send("An error occurred while trying to play your music.")
 
     @app_commands.command(name="pause", description="Pauses the current song.")
     async def pause_(self, interaction: discord.Interaction):
