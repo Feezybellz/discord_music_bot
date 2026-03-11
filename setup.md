@@ -37,7 +37,15 @@ YouTube is extremely aggressive against bots. To bypass this, you **MUST** use a
    - Enable **ALL THREE** Privileged Gateway Intents (Presence, Server Members, Message Content).
 4. In **OAuth2 -> URL Generator**:
    - Check `bot` and `applications.commands`.
-   - Scroll down and check `Administrator`.
+   - **Step 2: Bot Permissions** - Once you check `bot`, a new section will appear below. **SCROLL DOWN** and check:
+     - `Administrator` (Recommended for the easiest setup)
+     - **OR** manually select these essential permissions:
+       - `View Channels` (General)
+       - `Send Messages` (Text)
+       - `Embed Links` (Text)
+       - `Connect` (Voice)
+       - `Speak` (Voice)
+       - `Use Slash Commands` (Text)
 5. Invite the bot using the generated link.
 
 ## 4. Installation
@@ -56,6 +64,7 @@ DEBUG_MODE=true
 PO_TOKEN=paste_your_poToken_here
 VISITOR_DATA=paste_your_visitorData_here
 PROXY_URL=http://user:pass@host:port (Optional: For bypassing IP blocks)
+COOKIE_PATH=/path/to/your/cookie.txt (Optional: Defaults to cookie.txt in bot folder)
 ```
 
 ## 6. Commands Reference
@@ -64,3 +73,4 @@ PROXY_URL=http://user:pass@host:port (Optional: For bypassing IP blocks)
 - `/musicbot queue list`: View the current queue.
 - `/musicbot stop`: Stop music and disconnect.
 - `/musicbot status`: Check bot permissions.
+- `/musicbot check`: Verify if the bot can see your cookies and PO token.

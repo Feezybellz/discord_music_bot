@@ -163,15 +163,43 @@ class MusicBotGroup(app_commands.Group):
         fmt = '\n'.join(f'**{i+1}.** {song}' for i, song in enumerate(upcoming))
         await interaction.response.send_message(embed=discord.Embed(title="Queue", description=fmt))
 
+    @app_commands.command(name="pause")
+    async def pause_(self, interaction: discord.Interaction):
+        if interaction.guild.voice_client and interaction.guild.voice_client.is_playing():
+            interaction.guild.voice_client.pause()
+            await interaction.response.send_message("Paused.")
+        else:
+            await interaction.response.send_message("Nothing is playing.", ephemeral=True)
+
+    @app_commands.command(name="resume")
+    async def resume_(self, interaction: discord.Interaction):
+        if interaction.guild.voice_client and interaction.guild.voice_client.is_paused():
+            interaction.guild.voice_client.resume()
+            await interaction.response.send_message("Resumed.")
+        else:
+            await interaction.response.send_message("Music is not paused.", ephemeral=True)
+
+    @app_commands.command(name="skip")
+    async def skip_(self, interaction: discord.Interaction):
+        if interaction.guild.voice_client:
+            interaction.guild.voice_client.stop()
+            await interaction.response.send_message("Skipped.")
+
     @app_commands.command(name="stop")
     async def stop_(self, interaction: discord.Interaction):
         await self.bot.get_cog("Music").cleanup(interaction.guild)
         await interaction.response.send_message("Stopped.")
 
-    @app_commands.command(name="skip")
-    async def skip_(self, interaction: discord.Interaction):
-        if interaction.guild.voice_client: interaction.guild.voice_client.stop()
-        await interaction.response.send_message("Skipped.")
+    @app_commands.command(name="loop")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="Off", value=0),
+        app_commands.Choice(name="Track", value=1),
+        app_commands.Choice(name="Queue", value=2),
+    ])
+    async def loop_(self, interaction: discord.Interaction, mode: app_commands.Choice[int]):
+        player = self.get_player(interaction)
+        player.loop_mode = mode.value
+        await interaction.response.send_message(f"Loop set to {mode.name}.")
 
 
 class Music(commands.Cog):
