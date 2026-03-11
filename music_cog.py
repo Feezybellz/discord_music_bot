@@ -170,16 +170,40 @@ class Music(commands.Cog):
         fmt = '\n'.join(f'**{i+1}.** {song}' for i, song in enumerate(upcoming))
         await interaction.response.send_message(embed=discord.Embed(title="Queue", description=fmt))
 
-    @app_commands.command(name="loop")
-    @app_commands.choices(mode=[
-        app_commands.Choice(name="Off", value=0),
-        app_commands.Choice(name="Track", value=1),
-        app_commands.Choice(name="Queue", value=2),
-    ])
-    async def loop_(self, interaction: discord.Interaction, mode: app_commands.Choice[int]):
-        player = self.get_player(interaction)
-        player.loop_mode = mode.value
-        await interaction.response.send_message(f"Loop set to {mode.name}.")
+    @app_commands.command(name="status", description="Shows the bot's current status and permissions.")
+    async def status_(self, interaction: discord.Interaction):
+        logger.info(f"Status command requested by {interaction.user.id}")
+        
+        try:
+            # Check permissions in the current channel
+            perms = interaction.app_permissions
+            
+            status_embed = discord.Embed(title="Bot Status Report", color=discord.Color.green())
+            status_embed.add_field(name="Current Guild", value=f"{interaction.guild.name} ({interaction.guild.id})")
+            status_embed.add_field(name="Total Guilds Seen", value=f"{len(self.bot.guilds)}")
+            
+            # Key permissions check
+            perm_list = [
+                ("Connect", perms.connect),
+                ("Speak", perms.speak),
+                ("Use Slash Commands", perms.use_application_commands),
+                ("View Channels", perms.view_channel),
+                ("Send Messages", perms.send_messages),
+                ("Embed Links", perms.embed_links)
+            ]
+            
+            perm_str = "\n".join([f"{'✅' if val else '❌'} {name}" for name, val in perm_list])
+            status_embed.add_field(name="Permissions Check", value=perm_str, inline=False)
+            
+            # Voice status
+            vc = interaction.guild.voice_client
+            vc_status = f"Connected to: {vc.channel.name}" if vc else "Not connected to voice."
+            status_embed.add_field(name="Voice Status", value=vc_status, inline=False)
+
+            await interaction.response.send_message(embed=status_embed)
+        except Exception as e:
+            logger.error(f"Error in status command: {e}", exc_info=True)
+            await interaction.response.send_message(f"Error fetching status: {e}")
 
 async def setup(bot):
     await bot.add_cog(Music(bot))
