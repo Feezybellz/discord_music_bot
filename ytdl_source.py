@@ -18,6 +18,8 @@ ytdl_format_options = {
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
+    # Match a standard desktop browser to avoid "Reload" errors
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 }
 
 # Determine the best way to authenticate/bypass
@@ -32,9 +34,7 @@ if cookie_file:
     ytdl_format_options['cookiefile'] = cookie_file
 else:
     logger.warning("No cookies.txt found. Using mobile spoofing bypass...")
-    # Robust fallback bypass settings
     ytdl_format_options['youtube_include_dash_manifest'] = False
-    ytdl_format_options['user_agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
     ytdl_format_options['extractor_args'] = {
         'youtube': {
             'player_client': ['ios', 'mweb'],
