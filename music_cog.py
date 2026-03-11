@@ -102,19 +102,22 @@ class MusicBotGroup(app_commands.Group):
                     break
             
             # Internal yt-dlp config check
-            ytdl_cookie = ytdl.params.get('cookiefile', '❌ Not loaded in yt-dlp')
-            ytdl_ua = ytdl.params.get('user_agent', 'Default')
+            ytdl_cookie = ytdl.params.get('cookiefile', '❌ Not loaded')
             ytdl_clients = ytdl.params.get('extractor_args', {}).get('youtube', {}).get('player_client', 'Default')
+            
+            # PO Token check
+            po_token = os.getenv('PO_TOKEN')
+            po_status = "✅ Present" if po_token else "❌ Missing (Highly recommended for servers)"
 
             status = (
                 f"📂 **System Check**\n"
                 f"Base Dir: `{BASE_DIR}`\n"
-                f"File Status: {found}\n\n"
+                f"File Status: {found}\n"
+                f"PO Token: {po_status}\n\n"
                 f"⚙️ **yt-dlp Internal Config**\n"
                 f"Cookie Path: `{ytdl_cookie}`\n"
-                f"User-Agent: `{ytdl_ua}`\n"
                 f"Player Clients: `{ytdl_clients}`\n\n"
-                f"*If File Status is ✅ but Cookie Path is ❌, restart the bot.*"
+                f"*If any value looks wrong, restart the bot entirely.*"
             )
             await interaction.followup.send(status)
         except Exception as e:
