@@ -4,10 +4,30 @@ This guide will help you set up the Python Discord Music Bot and configure the e
 
 ## 1. Prerequisites
 - **Python 3.10+**: Ensure Python is installed on your system.
-- **FFmpeg**: This is required for audio processing.
-  - **Linux (Ubuntu/Debian):** `sudo apt update && sudo apt install ffmpeg`
-  - **macOS (Homebrew):** `brew install ffmpeg`
-  - **Windows:** Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add the `bin` folder to your system PATH.
+- **FFmpeg**: This is **REQUIRED** for audio processing.
+
+### Checking for FFmpeg
+Before installing, check if you already have it:
+```bash
+ffmpeg -version
+```
+If you see an error like "command not found", follow the installation steps below:
+
+### Installing FFmpeg
+- **Linux (Ubuntu/Debian):**
+  ```bash
+  sudo apt update && sudo apt install ffmpeg
+  ```
+- **macOS (Homebrew):**
+  ```bash
+  brew install ffmpeg
+  ```
+- **Windows:**
+  1. Download the "essentials" build from [Gyan.dev](https://www.gyan.dev/ffmpeg/builds/).
+  2. Extract the ZIP file.
+  3. Move the folder to `C:\ffmpeg`.
+  4. Add `C:\ffmpeg\bin` to your **System Environment Variables (PATH)**.
+  5. Restart your terminal.
 
 ## 2. Discord Bot Setup
 1. Go to the [Discord Developer Portal](https://discord.com/developers/applications).

@@ -113,13 +113,19 @@ class Music(commands.Cog):
         """Request a song and add it to the queue."""
         await interaction.response.defer()
         
+        # Robustly find the member's voice state
+        member = interaction.guild.get_member(interaction.user.id)
+        if not member or not member.voice:
+            # Try fetching from API if cache is empty
+            member = await interaction.guild.fetch_member(interaction.user.id)
+
+        if not member.voice:
+            return await interaction.followup.send("I couldn't find you in a voice channel. Please join one and try again!")
+
         vc = interaction.guild.voice_client
 
         if not vc:
-            if interaction.user.voice:
-                vc = await interaction.user.voice.channel.connect()
-            else:
-                return await interaction.followup.send("You are not connected to a voice channel.")
+            vc = await member.voice.channel.connect()
 
         player = self.get_player(interaction)
 
